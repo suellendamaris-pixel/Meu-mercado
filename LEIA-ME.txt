@@ -1,0 +1,29 @@
+# Meu Mercado — versão instalável (PWA)
+
+## O que está incluído
+- Cadastro rápido de produtos e cálculo automático do carrinho.
+- Quantidade fracionada por kg + gramas (ex.: 2 kg e 350 g = 2,350 kg).
+- Preço por unidade, kg, litro, pacote ou dúzia.
+- Memória do último preço a partir de compras salvas.
+- Registro de compras, histórico e comparação mensal com gráfico.
+- Reconhecimento de voz em português nos navegadores compatíveis.
+- Leitor de código de barras pela API BarcodeDetector quando disponível.
+- Dados locais no aparelho (localStorage), exportação e importação de backup.
+- Manifesto PWA e service worker para uso offline após a primeira carga.
+
+## Como instalar no Android
+A forma mais simples é hospedar esta pasta em um endereço HTTPS (por exemplo, GitHub Pages ou outro serviço de hospedagem estática):
+1. Extraia o ZIP.
+2. Publique os arquivos mantendo-os juntos na mesma pasta.
+3. Abra o endereço HTTPS no Google Chrome do Android.
+4. No menu ⋮, escolha **Instalar app** ou **Adicionar à tela inicial**.
+
+O service worker e as permissões de microfone/câmera exigem contexto seguro (HTTPS, ou localhost). Abrir index.html diretamente como arquivo pode impedir instalação offline, voz e câmera.
+
+## Limitações importantes
+- Este pacote é um protótipo funcional de PWA, não um APK nativo assinado.
+- O reconhecimento de voz depende do navegador e, em alguns dispositivos, pode usar serviços de reconhecimento online; não garanta funcionamento totalmente offline da voz.
+- A leitura de código de barras usa BarcodeDetector, que não está disponível em todos os navegadores. No protótipo, o código lido não consulta automaticamente um catálogo de produtos; a identificação/nome deve ser conferida pelo usuário.
+- Os dados ficam no armazenamento do navegador do aparelho. Limpar os dados do navegador pode apagá-los. Use **Exportar backup** regularmente.
+- Comparação mensal considera as compras que foram registradas no aplicativo. Compras antigas podem ser inseridas cadastrando os itens e selecionando a data antiga.
+- O PWA ainda precisa de testes em dispositivos reais antes de uso como ferramenta financeira principal.
