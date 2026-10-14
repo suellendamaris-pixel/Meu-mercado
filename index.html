@@ -195,61 +195,46 @@ function parseNFeXml(xmlText){
 }
 function parseReceiptText(text){
   const rows=[];
-  const lines=text.split(/\r?\n/).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
-  const skip=/^(total|subtotal|valor pago|troco|dinheiro|cr[eé]dito|d[eé]bito|pix|cpf|cnpj|chave de acesso|consumidor|consulta|protocolo|nota fiscal|documento auxiliar|desconto total|tributos|impostos|obrigad[oa]|www\.|http)/i;
+  const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
   const num=s=>Number(String(s).replace(/\./g,'').replace(',','.'));
-  const add=(name,q,unit,price,total)=>{
-    name=String(name||'').replace(/\s*\(Código:\s*[^)]*\)/ig,'').replace(/\s*\(Codigo:\s*[^)]*\)/ig,'').replace(/^\W+|\W+$/g,'').trim();
-    if(!name||name.length<2||!Number.isFinite(price)||price<=0)return;
-    const key=name.toLowerCase();
-    if(rows.some(r=>r.name.toLowerCase()===key&&Math.abs(r.q-q)<0.0001&&Math.abs(r.price-price)<0.01))return;
+  const add=(name,q,unit,price)=>{
+    name=clean(name).replace(/\s*\(C[oó]digo\s*:\s*[^)]*\)/ig,'').replace(/\s*\(Codigo\s*:\s*[^)]*\)/ig,'').replace(/\bVl\.?\s*Total\b/ig,'').replace(/^[\s:;.,-]+|[\s:;.,-]+$/g,'').trim();
+    if(!name||name.length<2||!Number.isFinite(price)||price<=0||!Number.isFinite(q)||q<=0)return;
+    if(rows.some(r=>r.name.toLowerCase()===name.toLowerCase()&&Math.abs(r.q-q)<0.0001&&Math.abs(r.price-price)<0.01))return;
     rows.push({id:'receipt-'+Date.now()+'-'+rows.length,name,price,unit,q,discount:0,selected:true});
   };
-  // Layout common in Brazilian NFC-e pages: product name/code on one line,
-  // then "Qtde.: 2,04 UN: KG9 Vl. Unit.: 39,9", followed by "81,40".
-  for(let i=0;i<lines.length;i++){
-    const line=lines[i];
-    if(skip.test(line))continue;
-    const detail=line.match(/(?:Qtde\.?|Quantidade)\s*:\s*([\d.,]+)\s+UN\s*:\s*(KG9?|K[GQ]|G|L|LT|UND9?|UN)\s+Vl\.?\s*Unit\.?\s*:\s*(\d+[.,]\d+)/i);
-    if(detail){
-      let name=line.replace(/(?:Qtde\.?|Quantidade)\s*:.*/i,'').trim();
-      if(!name && i>0) name=lines[i-1];
-      let q=num(detail[1]), u=detail[2].toUpperCase();
-      let unit=/^KG|^KQ/.test(u)?'kg':/^L|^LT/.test(u)?'L':'un';
-      // In some OCR text, the product name appears on the previous line.
-      if(/^(?:Qtde|Quantidade)\s*:/i.test(name)) name='';
-      if(!name && i>0)name=lines[i-1];
-      add(name,q,unit,num(detail[3]));
-      continue;
+  // Parse by the repeated quantity/unit/unit-price anchor across OCR line breaks or merged lines.
+  const detailRe=/(?:Qtde\.?|Quantidade)\s*:\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+Vl\.?\s*Unit\.?\s*:\s*([\d.,]+)/ig;
+  let m, lastEnd=0;
+  while((m=detailRe.exec(text))!==null){
+    const prefix=text.slice(lastEnd,m.index);
+    // The latest fiscal product name/code before each quantity anchor is the relevant one.
+    const codeMatches=[...prefix.matchAll(/([^\r\n]*?)\s*\(C[oó]digo\s*:\s*([A-Z0-9]+)\s*\)\s*(?:Vl\.?\s*Total)?/ig)];
+    let name='';
+    if(codeMatches.length){
+      const cm=codeMatches[codeMatches.length-1];
+      name=cm[1].split(/\bVl\.?\s*Total\b/i).pop().trim();
+      // If OCR merged a prior item's total into this segment, keep only the text after it.
+      name=name.split(/\b\d{1,7}[.,]\d{2}\b/).pop().trim();
+    } else {
+      const before=prefix.replace(/\bVl\.?\s*Total\b/ig,' ').replace(/\b\d{1,7}[.,]\d{2}\b/g,' ').trim();
+      name=before.split(/\r?\n/).filter(Boolean).pop()||'';
     }
-    // Product name line often contains a fiscal item code; details follow on next line.
-    const isProductName=/\(C[oó]digo\s*:/i.test(line);
-    if(isProductName){
-      const next=lines[i+1]||'';
-      const d=next.match(/(?:Qtde\.?|Quantidade)\s*:\s*([\d.,]+)\s+UN\s*:\s*(KG9?|K[GQ]|G|L|LT|UND9?|UN)\s+Vl\.?\s*Unit\.?\s*:\s*(\d+[.,]\d+)/i);
-      if(d){
-        const q=num(d[1]),u=d[2].toUpperCase(),unit=/^KG|^KQ/.test(u)?'kg':/^L|^LT/.test(u)?'L':'un';
-        add(line,q,unit,num(d[3]));i++;continue;
-      }
-    }
+    let unitRaw=m[2].toUpperCase().replace(/[^A-Z0-9]/g,'');
+    let unit=/^(KG|KG9|KQ|KQ9|KGS|KG0)/.test(unitRaw)?'kg':/^(L|LT|LTR)/.test(unitRaw)?'L':'un';
+    const q=num(m[1]), price=num(m[3]);
+    add(name,q,unit,price);
+    // Advance to after unit price, leaving the following total to be skipped when seeking next name.
+    lastEnd=detailRe.lastIndex;
   }
   if(rows.length)return rows;
-  // Generic fallback for simpler receipts that put name, quantity and price on one line.
-  for(const line of lines){
-    if(skip.test(line)||line.length<4)continue;
-    if(/(?:Qtde\.?|Quantidade)\s*:/i.test(line))continue;
-    const nums=[...line.matchAll(/(?:R\$\s*)?(-?\d{1,7}[.,]\d{2})/g)];
-    if(!nums.length)continue;
-    const last=nums[nums.length-1],price=num(last[1]);
-    if(!Number.isFinite(price)||price<=0)continue;
-    let name=line.slice(0,last.index).replace(/\s*(?:\d+[.,]?\d*\s*[xX×]\s*)?$/,'').replace(/[|*#]+/g,' ').trim();
-    name=name.replace(/\s+\d{8,14}\s*$/,'').replace(/\s*\(C[oó]digo:\s*[^)]*\)/ig,'').trim();
-    if(name.length<2||skip.test(name))continue;
-    let q=1,unit='un',unitPrice=price;
-    const qtyPrice=line.match(/(\d+[.,]\d{3,})\s*(kg|quilo|l|lt)\s*[xX×]?\s*(?:R\$\s*)?(\d+[.,]\d{2})/i);
-    if(qtyPrice){q=num(qtyPrice[1]);unit=/kg|quilo/i.test(qtyPrice[2])?'kg':'L';unitPrice=num(qtyPrice[3]);}
-    else {const qty=line.match(/\b(\d+(?:[.,]\d+)?)\s*[xX×]\s*(?:R\$\s*)?(\d+[.,]\d{2})/);if(qty){q=num(qty[1]);unitPrice=num(qty[2]);}}
-    add(name,q,unit,unitPrice);
+  // Fallback for simpler one-line receipt formats.
+  const lines=text.split(/\r?\n/).map(clean).filter(Boolean);
+  const skip=/^(total|subtotal|valor pago|troco|dinheiro|cr[eé]dito|d[eé]bito|pix|cpf|cnpj|chave de acesso|consumidor|consulta|protocolo|nota fiscal|documento auxiliar|desconto total|tributos|impostos|obrigad[oa]|www\.|http)/i;
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];if(skip.test(line))continue;
+    const match=line.match(/^(.+?)\s+\(C[oó]digo\s*:\s*[^)]+\).*?(\d+[.,]\d{2})\s*$/i);
+    if(match)add(match[1],1,'un',num(match[2]));
   }
   return rows;
 }
@@ -286,16 +271,30 @@ function addReceiptItemsToCart(){
   setTimeout(()=>{$('receiptDialog').close();switchTab('buy');},900);
 }
 async function scanReceiptQR(){
-  const status=$('receiptStatus');status.textContent='Abrindo câmera para ler o QR Code…';
-  if(!('BarcodeDetector'in window)){status.textContent='Este navegador não oferece leitor QR nativo. Você pode importar o XML/TXT do cupom ou fotografar o cupom.';return;}
+  const status=$('receiptStatus');status.textContent='Abrindo leitor de QR Code…';
+  let stream=null,dlg=null,stopped=false,raf=0;
   try{
-    const formats=await BarcodeDetector.getSupportedFormats();if(!formats.includes('qr_code')){status.textContent='Leitura de QR Code não é compatível neste navegador.';return;}
-    const detector=new BarcodeDetector({formats:['qr_code']});
-    const qrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
-    const qrDlg=document.createElement('dialog');qrDlg.style.cssText='border:1px solid #dce5df;border-radius:16px;width:min(92vw,520px);padding:16px';const heading=document.createElement('h3');heading.textContent='Aponte para o QR Code fiscal';const vid=document.createElement('video');vid.setAttribute('playsinline','');vid.muted=true;vid.style.cssText='width:100%;max-height:55vh';vid.srcObject=qrStream;const st=document.createElement('p');st.textContent='Procurando QR Code…';const close=document.createElement('button');close.className='btn secondary';close.textContent='Cancelar';qrDlg.append(heading,vid,st,close);document.body.append(qrDlg);qrDlg.showModal();await vid.play();
-    let stopped=false;const stop=()=>{stopped=true;qrStream.getTracks().forEach(t=>t.stop());qrDlg.close();qrDlg.remove();};close.onclick=stop;
-    const tick=async()=>{if(stopped)return;try{const codes=await detector.detect(vid);if(codes.length){const raw=codes[0].rawValue;$('receiptText').value=raw;status.textContent='QR Code lido. Se ele contiver apenas um endereço de consulta fiscal, abra esse endereço com internet ou importe o XML/arquivo fiscal para carregar a lista de produtos.';stop();return;}}catch(e){}requestAnimationFrame(tick);};tick();
-  }catch(e){status.textContent='Não foi possível usar a câmera. Confira a permissão e tente enviar uma foto/arquivo.';}
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Câmera indisponível neste navegador.');
+    if(!window.jsQR){
+      await new Promise((resolve,reject)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';sc.onload=resolve;sc.onerror=()=>reject(new Error('Não consegui carregar o leitor de QR. Conecte-se à internet e tente novamente.'));document.head.appendChild(sc);});
+    }
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    dlg=document.createElement('dialog');dlg.style.cssText='border:1px solid #dce5df;border-radius:16px;width:min(92vw,520px);padding:16px';
+    const heading=document.createElement('h3');heading.textContent='Aponte a câmera para o QR Code fiscal';
+    const vid=document.createElement('video');vid.setAttribute('playsinline','');vid.muted=true;vid.autoplay=true;vid.style.cssText='width:100%;max-height:55vh';vid.srcObject=stream;
+    const canvas=document.createElement('canvas');canvas.style.display='none';const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    const st=document.createElement('p');st.textContent='Procurando QR Code… mantenha o código inteiro visível.';
+    const close=document.createElement('button');close.className='btn secondary';close.textContent='Cancelar';
+    dlg.append(heading,vid,canvas,st,close);document.body.append(dlg);dlg.showModal();await vid.play();
+    const stop=()=>{stopped=true;if(raf)cancelAnimationFrame(raf);if(stream)stream.getTracks().forEach(t=>t.stop());if(dlg&&dlg.open)dlg.close();if(dlg)dlg.remove();};
+    close.onclick=stop;dlg.addEventListener('cancel',stop);
+    const tick=()=>{if(stopped)return;if(vid.readyState>=2&&vid.videoWidth){
+      canvas.width=vid.videoWidth;canvas.height=vid.videoHeight;ctx.drawImage(vid,0,0,canvas.width,canvas.height);
+      try{const img=ctx.getImageData(0,0,canvas.width,canvas.height);const code=window.jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});if(code&&code.data){
+        $('receiptText').value=code.data;status.textContent='QR Code lido. Ele pode conter apenas o endereço da consulta fiscal; para importar os produtos, use o XML ou o texto da nota quando disponível.';stop();return;
+      }}catch(e){}
+    }raf=requestAnimationFrame(tick);};tick();
+  }catch(e){if(stream)stream.getTracks().forEach(t=>t.stop());if(dlg&&dlg.open)dlg.close();if(dlg)dlg.remove();status.textContent='Não consegui ler o QR Code: '+(e.message||e)+'. Confira a permissão da câmera e tente com boa iluminação.';}
 }
 
 function startVoice(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('voiceStatus').textContent='Este navegador não oferece reconhecimento de voz. Tente instalar/abrir pelo Google Chrome atualizado.';return;}stopVoice();recognition=new SR();recognition.lang='pt-BR';recognition.continuous=false;recognition.interimResults=false;$('voiceBtn').classList.add('listening');$('voiceBtn').textContent='🔴 Ouvindo… fale agora';$('voiceStatus').textContent='Pode falar os dados do produto.';recognition.onresult=e=>{const said=e.results[0][0].transcript;$('voiceStatus').textContent='Reconhecido: “'+said+'”';parseVoice(said);};recognition.onerror=e=>{$('voiceStatus').textContent='Não foi possível reconhecer a fala ('+e.error+'). Você pode digitar os dados.';stopVoice();};recognition.onend=()=>{stopVoice(false);};try{recognition.start();}catch(e){$('voiceStatus').textContent='Não foi possível iniciar o microfone. Confira a permissão do navegador.';stopVoice();}}
