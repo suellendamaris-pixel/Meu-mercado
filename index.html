@@ -194,23 +194,62 @@ function parseNFeXml(xmlText){
   }catch(e){return [];}
 }
 function parseReceiptText(text){
-  const rows=[];const lines=text.split(/\r?\n/).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const rows=[];
+  const lines=text.split(/\r?\n/).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
   const skip=/^(total|subtotal|valor pago|troco|dinheiro|cr[eé]dito|d[eé]bito|pix|cpf|cnpj|chave de acesso|consumidor|consulta|protocolo|nota fiscal|documento auxiliar|desconto total|tributos|impostos|obrigad[oa]|www\.|http)/i;
+  const num=s=>Number(String(s).replace(/\./g,'').replace(',','.'));
+  const add=(name,q,unit,price,total)=>{
+    name=String(name||'').replace(/\s*\(Código:\s*[^)]*\)/ig,'').replace(/\s*\(Codigo:\s*[^)]*\)/ig,'').replace(/^\W+|\W+$/g,'').trim();
+    if(!name||name.length<2||!Number.isFinite(price)||price<=0)return;
+    const key=name.toLowerCase();
+    if(rows.some(r=>r.name.toLowerCase()===key&&Math.abs(r.q-q)<0.0001&&Math.abs(r.price-price)<0.01))return;
+    rows.push({id:'receipt-'+Date.now()+'-'+rows.length,name,price,unit,q,discount:0,selected:true});
+  };
+  // Layout common in Brazilian NFC-e pages: product name/code on one line,
+  // then "Qtde.: 2,04 UN: KG9 Vl. Unit.: 39,9", followed by "81,40".
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    if(skip.test(line))continue;
+    const detail=line.match(/(?:Qtde\.?|Quantidade)\s*:\s*([\d.,]+)\s+UN\s*:\s*(KG9?|K[GQ]|G|L|LT|UND9?|UN)\s+Vl\.?\s*Unit\.?\s*:\s*(\d+[.,]\d+)/i);
+    if(detail){
+      let name=line.replace(/(?:Qtde\.?|Quantidade)\s*:.*/i,'').trim();
+      if(!name && i>0) name=lines[i-1];
+      let q=num(detail[1]), u=detail[2].toUpperCase();
+      let unit=/^KG|^KQ/.test(u)?'kg':/^L|^LT/.test(u)?'L':'un';
+      // In some OCR text, the product name appears on the previous line.
+      if(/^(?:Qtde|Quantidade)\s*:/i.test(name)) name='';
+      if(!name && i>0)name=lines[i-1];
+      add(name,q,unit,num(detail[3]));
+      continue;
+    }
+    // Product name line often contains a fiscal item code; details follow on next line.
+    const isProductName=/\(C[oó]digo\s*:/i.test(line);
+    if(isProductName){
+      const next=lines[i+1]||'';
+      const d=next.match(/(?:Qtde\.?|Quantidade)\s*:\s*([\d.,]+)\s+UN\s*:\s*(KG9?|K[GQ]|G|L|LT|UND9?|UN)\s+Vl\.?\s*Unit\.?\s*:\s*(\d+[.,]\d+)/i);
+      if(d){
+        const q=num(d[1]),u=d[2].toUpperCase(),unit=/^KG|^KQ/.test(u)?'kg':/^L|^LT/.test(u)?'L':'un';
+        add(line,q,unit,num(d[3]));i++;continue;
+      }
+    }
+  }
+  if(rows.length)return rows;
+  // Generic fallback for simpler receipts that put name, quantity and price on one line.
   for(const line of lines){
     if(skip.test(line)||line.length<4)continue;
-    // Most Brazilian receipts put one or two prices at the end of the line.
+    if(/(?:Qtde\.?|Quantidade)\s*:/i.test(line))continue;
     const nums=[...line.matchAll(/(?:R\$\s*)?(-?\d{1,7}[.,]\d{2})/g)];
     if(!nums.length)continue;
-    const last=nums[nums.length-1],price=Number(last[1].replace('.','').replace(',','.'));
+    const last=nums[nums.length-1],price=num(last[1]);
     if(!Number.isFinite(price)||price<=0)continue;
     let name=line.slice(0,last.index).replace(/\s*(?:\d+[.,]?\d*\s*[xX×]\s*)?$/,'').replace(/[|*#]+/g,' ').trim();
-    name=name.replace(/\s+\d{8,14}\s*$/,'').trim();
+    name=name.replace(/\s+\d{8,14}\s*$/,'').replace(/\s*\(C[oó]digo:\s*[^)]*\)/ig,'').trim();
     if(name.length<2||skip.test(name))continue;
-    let q=1,unit='un',unitPrice=price,discount=0;
+    let q=1,unit='un',unitPrice=price;
     const qtyPrice=line.match(/(\d+[.,]\d{3,})\s*(kg|quilo|l|lt)\s*[xX×]?\s*(?:R\$\s*)?(\d+[.,]\d{2})/i);
-    if(qtyPrice){q=Number(qtyPrice[1].replace(',','.'));unit=/kg|quilo/i.test(qtyPrice[2])?'kg':'L';unitPrice=Number(qtyPrice[3].replace(',','.'));}
-    else {const qty=line.match(/\b(\d+(?:[.,]\d+)?)\s*[xX×]\s*(?:R\$\s*)?(\d+[.,]\d{2})/);if(qty){q=Number(qty[1].replace(',','.'));unitPrice=Number(qty[2].replace(',','.'));}}
-    rows.push({id:'receipt-'+Date.now()+'-'+rows.length,name,price:unitPrice,unit,q,discount,selected:true});
+    if(qtyPrice){q=num(qtyPrice[1]);unit=/kg|quilo/i.test(qtyPrice[2])?'kg':'L';unitPrice=num(qtyPrice[3]);}
+    else {const qty=line.match(/\b(\d+(?:[.,]\d+)?)\s*[xX×]\s*(?:R\$\s*)?(\d+[.,]\d{2})/);if(qty){q=num(qty[1]);unitPrice=num(qty[2]);}}
+    add(name,q,unit,unitPrice);
   }
   return rows;
 }
