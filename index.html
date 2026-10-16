@@ -235,12 +235,40 @@ function renderShoppingList(){
   buttons.append(add,edit,del);row.appendChild(buttons);el.appendChild(row);
  });
 }
-function renderReports(){const a=$('monthA').value||monthNow(),b=$('monthB').value||monthNow();const sum=m=>state.purchases.filter(c=>c.date.slice(0,7)===m).reduce((s,c)=>s+c.total,0);const av=sum(a),bv=sum(b),diff=bv-av;$('monthALabel').textContent=a;$('monthBLabel').textContent=b;$('monthATotal').textContent=money(av);$('monthBTotal').textContent=money(bv);$('monthDiff').textContent=(diff>0?'+':diff<0?'−':'')+money(Math.abs(diff));$('monthDiff').style.color=diff>0?'#b42318':diff<0?'#176b4d':'inherit';$('reportNote').textContent=diff>0?'Você registrou gastos maiores no mês final.':diff<0?'Você registrou gastos menores no mês final.':'Os totais registrados são iguais.';drawChart();renderPriceCompare();}
-function drawChart(){const canvas=$('chart'),ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);const months={};state.purchases.forEach(c=>months[c.date.slice(0,7)]=(months[c.date.slice(0,7)]||0)+c.total);const keys=Object.keys(months).sort().slice(-6);if(!keys.length){ctx.fillStyle='#64736a';ctx.font='16px system-ui';ctx.textAlign='center';ctx.fillText('Finalize compras para ver o gráfico',w/2,h/2);return;}const max=Math.max(...keys.map(k=>months[k]),1),pad=38,chartH=h-60,barW=Math.min(54,(w-2*pad)/keys.length*.58),gap=(w-2*pad)/keys.length;ctx.strokeStyle='#dce5df';ctx.beginPath();ctx.moveTo(pad,chartH+8);ctx.lineTo(w-pad,chartH+8);ctx.stroke();keys.forEach((k,i)=>{const bh=months[k]/max*chartH,x=pad+i*gap+(gap-barW)/2,y=chartH+8-bh;ctx.fillStyle='#176b4d';ctx.beginPath();ctx.roundRect(x,y,barW,bh,5);ctx.fill();ctx.fillStyle='#17231d';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(k.slice(5)+'/'+k.slice(2,4),x+barW/2,h-16);ctx.fillStyle='#64736a';ctx.font='10px system-ui';ctx.fillText(months[k]>=1000?(months[k]/1000).toFixed(1)+'k':Math.round(months[k]).toString(),x+barW/2,Math.max(12,y-5));});}
+function renderReports(){const a=$('monthA').value||monthNow(),b=$('monthB').value||monthNow();const sum=m=>(Array.isArray(state.purchases)?state.purchases:[]).filter(c=>(c.date||'').slice(0,7)===m).reduce((s,c)=>s+(Array.isArray(c.items)?c.items.reduce((ss,i)=>ss+lineTotal(i),0):Number(c.total)||0),0);const av=sum(a),bv=sum(b),diff=bv-av;$('monthALabel').textContent=a;$('monthBLabel').textContent=b;$('monthATotal').textContent=money(av);$('monthBTotal').textContent=money(bv);$('monthDiff').textContent=(diff>0?'+':diff<0?'−':'')+money(Math.abs(diff));$('monthDiff').style.color=diff>0?'#b42318':diff<0?'#176b4d':'inherit';$('reportNote').textContent=diff>0?'Você registrou gastos maiores no mês final.':diff<0?'Você registrou gastos menores no mês final.':'Os totais registrados são iguais.';drawChart();renderPriceCompare();}
+function drawChart(){const canvas=$('chart'),ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);const months={};(Array.isArray(state.purchases)?state.purchases:[]).forEach(c=>{const m=(c.date||'').slice(0,7);if(!m)return;const total=Array.isArray(c.items)?c.items.reduce((ss,i)=>ss+lineTotal(i),0):(Number(c.total)||0);months[m]=(months[m]||0)+total;});const keys=Object.keys(months).sort().slice(-6);if(!keys.length){ctx.fillStyle='#64736a';ctx.font='16px system-ui';ctx.textAlign='center';ctx.fillText('Finalize compras para ver o gráfico',w/2,h/2);return;}const max=Math.max(...keys.map(k=>months[k]),1),pad=38,chartH=h-60,barW=Math.min(54,(w-2*pad)/keys.length*.58),gap=(w-2*pad)/keys.length;ctx.strokeStyle='#dce5df';ctx.beginPath();ctx.moveTo(pad,chartH+8);ctx.lineTo(w-pad,chartH+8);ctx.stroke();keys.forEach((k,i)=>{const bh=months[k]/max*chartH,x=pad+i*gap+(gap-barW)/2,y=chartH+8-bh;ctx.fillStyle='#176b4d';ctx.beginPath();ctx.roundRect(x,y,barW,bh,5);ctx.fill();ctx.fillStyle='#17231d';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(k.slice(5)+'/'+k.slice(2,4),x+barW/2,h-16);ctx.fillStyle='#64736a';ctx.font='10px system-ui';ctx.fillText(months[k]>=1000?(months[k]/1000).toFixed(1)+'k':Math.round(months[k]).toString(),x+barW/2,Math.max(12,y-5));});}
 function renderPriceCompare(){const sel=$('priceCompare');if(!sel)return;const products=allProducts();if(!products.length){$('priceCompareResult').textContent='Selecione um produto com histórico.';return;}if(!products.some(n=>n===sel.value))sel.value=products[0];const name=(sel.value||'').toLocaleLowerCase('pt-BR'),rows=priceRows(name);if(!rows.length){$('priceCompareResult').textContent='Ainda não há compras anteriores desse produto.';return;}const oldest=rows[rows.length-1],latest=rows[0],diff=latest.price-oldest.price;$('priceCompareResult').textContent=`Último: ${money(latest.price)}/${latest.unit} (${latest.date.split('-').reverse().join('/')}). Primeiro registro: ${money(oldest.price)}/${oldest.unit}. Diferença: ${diff>0?'+':diff<0?'−':''}${money(Math.abs(diff))} por ${latest.unit}.`;}
 function renderAll(){renderCart();renderHistory();renderProducts();renderReports();renderShoppingList();}
 function exportBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-mercado-backup-'+today()+'.json';a.click();URL.revokeObjectURL(url);}
-function importBackup(){const file=$('importFile').files[0];if(!file)return;const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!Array.isArray(x.purchases)||!Array.isArray(x.cart))throw Error();if(confirm('Importar backup e substituir os dados atuais?')){state={...state,...x};save();alert('Backup importado.');}}catch(e){alert('Arquivo de backup inválido.');}};r.readAsText(file);$('importFile').value='';}
+function importBackup(){
+ const file=$('importFile').files[0];
+ if(!file)return;
+ const r=new FileReader();
+ r.onload=()=>{
+  try{
+   const raw=String(r.result||'').replace(/^\\uFEFF/,'').trim();
+   const x=JSON.parse(raw);
+   if(!x||typeof x!=='object'||!Array.isArray(x.purchases)||!Array.isArray(x.cart)){
+    throw new Error('Estrutura do backup não reconhecida');
+   }
+   if(!confirm('Importar backup e substituir os dados atuais?'))return;
+   state={...state,...x};
+   state.purchases=Array.isArray(x.purchases)?x.purchases:[];
+   state.cart=Array.isArray(x.cart)?x.cart:[];
+   state.shoppingList=Array.isArray(x.shoppingList)?x.shoppingList:[];
+   state.productMeta=x.productMeta&&typeof x.productMeta==='object'?x.productMeta:{};
+   state.barcodeMap=x.barcodeMap&&typeof x.barcodeMap==='object'?x.barcodeMap:{};
+   save();
+   alert('Backup importado. Compras encontradas: '+state.purchases.length+'. Abra a aba Histórico para conferir.');
+  }catch(e){
+   alert('Não foi possível importar este arquivo. Selecione o backup JSON exportado pelo Meu Mercado (arquivo .json), não o ZIP do projeto nem um arquivo HTML.');
+  }finally{
+   $('importFile').value='';
+  }
+ };
+ r.onerror=()=>{alert('Não foi possível ler o arquivo. Tente selecioná-lo novamente.');$('importFile').value='';};
+ r.readAsText(file,'UTF-8');
+}
 
 let receiptRows=[];
 async function readReceiptFile(){
@@ -284,40 +312,60 @@ function parseNFeXml(xmlText){
 }
 function parseReceiptText(text){
  const rows=[];
- const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
- const num=s=>Number(String(s||'').replace(/\./g,'').replace(',','.'));
+ const clean=s=>String(s||'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+ // Brazilian receipt numbers: 1.234,56 or 39,90; OCR may also produce 39.90.
+ const num=s=>{
+  let v=String(s||'').trim().replace(/[R$\s]/g,'');
+  if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');
+  else if((v.match(/\./g)||[]).length>1)v=v.replace(/\./g,'');
+  const n=Number(v);return n;
+ };
  const add=(name,q,unit,price,total)=>{
-  name=clean(name).replace(/\s*\(C[oó]digo\s*:\s*[^)]*\)/ig,'').replace(/\s*\(Codigo\s*:\s*[^)]*\)/ig,'').replace(/\bVl\.?\s*Total\b/ig,'').replace(/^[\s:;.,-]+|[\s:;.,-]+$/g,'').trim();
+  name=clean(name)
+   .replace(/\s*\(C[oó]digo\s*:\s*[^)]*\)/ig,'')
+   .replace(/\s*\(Codigo\s*:\s*[^)]*\)/ig,'')
+   .replace(/\bVl\.?\s*Total\b/ig,'')
+   .replace(/^[\s:;.,-]+|[\s:;.,-]+$/g,'').trim();
   name=name.replace(/\b(?:Código|Codigo)\s*:?$/i,'').trim();
   if(!name||name.length<2||!Number.isFinite(price)||price<=0||!Number.isFinite(q)||q<=0)return;
   if(rows.some(r=>r.name.toLowerCase()===name.toLowerCase()&&Math.abs(r.q-q)<0.0001&&Math.abs(r.price-price)<0.01))return;
-  // Prefer the unit price from the receipt; total is retained only for checking.
   rows.push({id:'receipt-'+Date.now()+'-'+rows.length,name,price,unit,q,discount:0,selected:true,receiptTotal:Number.isFinite(total)?total:null});
  };
- // Normalize OCR line breaks that split labels/codes, then parse each repeated fiscal item block.
- let t=String(text).replace(/\u00a0/g,' ').replace(/\r/g,'\n');
+ let t=String(text||'').replace(/\u00a0/g,' ').replace(/\r/g,'\n');
  t=t.replace(/\(\s*(?:C[oó]digo|Codigo)\s*:\s*\n?\s*/ig,'(Código: ');
- t=t.replace(/\n+\s*(AR[A-Z0-9]{4,})\s*\)/ig,'$1 )');
- t=t.replace(/\bQtde\s*\.\s*:\s*/ig,'Qtde.: ');
- t=t.replace(/\bVl\s*\.\s*Unit\s*\.\s*:\s*/ig,'Vl. Unit.: ');
+ t=t.replace(/\n+\s*((?:AR)?[A-Z0-9]{4,})\s*\)/ig,'$1 )');
+ t=t.replace(/\bQtde\s*\.\s*:\s*/ig,'Qtde.: ')
+      .replace(/\bVl\s*\.\s*Unit\s*\.\s*:\s*/ig,'Vl. Unit.: ');
  const norm=clean(t);
- const re=/([A-ZÀ-Ü0-9][A-ZÀ-Ü0-9 .\/_-]{1,90}?)\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*([A-Z0-9]+)\s*\)\s*(?:Vl\.?\s*Total)?\s*Qtde\.?\s*:\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+Vl\.?\s*Unit\.?\s*:\s*([\d.,]+)\s+([\d.,]{3,})/ig;
+ // Flexible repeated-item pattern; accepts OCR punctuation/spacing variations.
+ const re=/([A-ZÀ-Ü0-9][A-ZÀ-Ü0-9 .\/_-]{1,100}?)\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*([A-Z0-9]+)\s*\)\s*(?:Vl\.?\s*Total\s*)?Qtde\.?\s*:\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+Vl\.?\s*Unit\.?\s*:\s*([\d.,]+)\s+([\d.,]+)/ig;
  let m;
  while((m=re.exec(norm))!==null){
-  const unitRaw=m[4].toUpperCase();
-  const unit=/^K(G|Q)/.test(unitRaw)?'kg':/^(L|LT|LTR)/.test(unitRaw)?'L':'un';
+  const raw=m[4].toUpperCase();
+  const unit=/^K(G|Q)/.test(raw)?'kg':/^(L|LT|LTR)/.test(raw)?'L':'un';
   add(m[1],num(m[3]),unit,num(m[5]),num(m[6]));
  }
  if(rows.length)return rows;
- // Fallback: line-anchored OCR where product name and quantity appear in separate lines.
- const lines=String(text).split(/\r?\n/).map(clean).filter(Boolean);
+ // Generic OCR fallback: identify quantity/unit-price/total even when labels are split across lines.
+ const lines=String(text||'').replace(/\r/g,'\n').split('\n').map(clean).filter(Boolean);
  for(let i=0;i<lines.length;i++){
   const nameMatch=lines[i].match(/^(.+?)\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*([A-Z0-9]+)\s*\)/i);
   if(!nameMatch)continue;
-  const name=nameMatch[1].replace(/\bVl\.?\s*Total\b/i,'').trim();
-  const block=clean(lines.slice(i,i+4).join(' '));
-  const d=block.match(/Qtde\.?\s*:\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+Vl\.?\s*Unit\.?\s*:\s*([\d.,]+)\s+([\d.,]{3,})/i);
-  if(d){const u=/^K(G|Q)/i.test(d[2])?'kg':/^(L|LT|LTR)/i.test(d[2])?'L':'un';add(name,num(d[1]),u,num(d[3]),num(d[4]));}
+  const block=clean(lines.slice(i,i+6).join(' '));
+  const d=block.match(/Qtde\.?\s*:\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+Vl\.?\s*Unit\.?\s*:\s*([\d.,]+)\s+([\d.,]+)/i);
+  if(d){
+   const raw=d[2].toUpperCase(),u=/^K(G|Q)/.test(raw)?'kg':/^(L|LT|LTR)/.test(raw)?'L':'un';
+   add(nameMatch[1],num(d[1]),u,num(d[3]),num(d[4]));
+  }
+ }
+ // Last-resort generic line parser for common POS receipt layouts: NAME QTY UNIT PRICE TOTAL.
+ if(!rows.length){
+  for(const line of lines){
+   const m=line.match(/^(.{2,60}?)\s+(\d+(?:[.,]\d+)?)\s+(KG|KG\d*|UN|UNID|UND|LT|L)\s+(?:R\$\s*)?(\d+(?:[.,]\d{1,3})?)\s+(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)$/i);
+   if(!m)continue;
+   const raw=m[3].toUpperCase(),u=/^KG/.test(raw)?'kg':/^(LT|L)$/.test(raw)?'L':'un';
+   add(m[1],num(m[2]),u,num(m[4]),num(m[5]));
+  }
  }
  return rows;
 }
