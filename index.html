@@ -243,33 +243,57 @@ function exportBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type
 function importBackup(){
  const file=$('importFile').files[0];
  if(!file)return;
+
  const r=new FileReader();
+
  r.onload=()=>{
+  let x;
+
   try{
-   const raw=String(r.result||'').replace(/^\\uFEFF/,'').trim();
-   const x=JSON.parse(raw);
-   if(!x||typeof x!=='object'||!Array.isArray(x.purchases)||!Array.isArray(x.cart)){
-    throw new Error('Estrutura do backup não reconhecida');
+   const raw=String(r.result||'').replace(/^\uFEFF/,'').trim();
+   x=JSON.parse(raw);
+
+   if(!x || typeof x!=='object' ||
+      !Array.isArray(x.purchases) ||
+      !Array.isArray(x.cart)){
+    throw new Error('O arquivo não tem a estrutura esperada.');
    }
-   if(!confirm('Importar backup e substituir os dados atuais?'))return;
+  }catch(e){
+   alert('Erro ao ler o backup: '+(e.message||e));
+   $('importFile').value='';
+   return;
+  }
+
+  if(!confirm('Importar backup e substituir os dados atuais?')){
+   $('importFile').value='';
+   return;
+  }
+
+  try{
    state={...state,...x};
-   state.purchases=Array.isArray(x.purchases)?x.purchases:[];
-   state.cart=Array.isArray(x.cart)?x.cart:[];
+   state.purchases=x.purchases;
+   state.cart=x.cart;
    state.shoppingList=Array.isArray(x.shoppingList)?x.shoppingList:[];
    state.productMeta=x.productMeta&&typeof x.productMeta==='object'?x.productMeta:{};
    state.barcodeMap=x.barcodeMap&&typeof x.barcodeMap==='object'?x.barcodeMap:{};
+
    save();
-   alert('Backup importado. Compras encontradas: '+state.purchases.length+'. Abra a aba Histórico para conferir.');
+
+   alert('Backup importado! Compras encontradas: '+state.purchases.length+'. Abra a aba Histórico para conferir.');
   }catch(e){
-   alert('Não foi possível importar este arquivo. Selecione o backup JSON exportado pelo Meu Mercado (arquivo .json), não o ZIP do projeto nem um arquivo HTML.');
+   alert('O JSON foi lido, mas ocorreu uma falha ao salvar ou atualizar o aplicativo: '+(e.message||e));
   }finally{
    $('importFile').value='';
   }
  };
- r.onerror=()=>{alert('Não foi possível ler o arquivo. Tente selecioná-lo novamente.');$('importFile').value='';};
+
+ r.onerror=()=>{
+  alert('Não foi possível ler o arquivo. Tente selecioná-lo novamente.');
+  $('importFile').value='';
+ };
+
  r.readAsText(file,'UTF-8');
 }
-
 let receiptRows=[];
 async function readReceiptFile(){
   const file=$('receiptFile').files[0]; if(!file){$('receiptStatus').textContent='Escolha primeiro uma foto, PDF, XML ou TXT.';return;}
