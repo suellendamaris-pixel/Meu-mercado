@@ -97,7 +97,7 @@ dialog{border:0;border-radius:18px;width:min(94vw,500px);padding:18px;box-shadow
     <div class="card"><h2>Orçamento mensal</h2><p class="muted">Defina o limite na tela Comprar. A barra no topo acompanha o total do carrinho atual.</p></div>
   </section>
 </main>
-<div class="bottomnav">🔒 Dados salvos neste aparelho · Faça backups regularmente · Versão 18/10/2026 C</div>
+<div class="bottomnav">🔒 Dados salvos neste aparelho · Faça backups regularmente · Versão 15/10/2026 B</div>
 
 <dialog id="receiptDialog" style="width:min(94vw,680px);max-height:90vh;overflow:auto;border:1px solid #dce5df;border-radius:16px;padding:18px">
   <h2>🧾 Importar cupom fiscal</h2>
@@ -155,7 +155,7 @@ function allProducts(){const m=new Map();[...state.purchases.flatMap(c=>c.items)
 function renderProducts(){const search=($('productSearch').value||'').toLocaleLowerCase('pt-BR');const list=allProducts().filter(n=>n.toLocaleLowerCase('pt-BR').includes(search));$('productSuggestions').innerHTML='';list.forEach(n=>{const o=document.createElement('option');o.value=n;$('productSuggestions').appendChild(o);});$('priceCompare').innerHTML='';list.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;$('priceCompare').appendChild(o);});const el=$('productList');el.innerHTML='';if(!list.length){el.innerHTML='<div class="empty">Seus produtos aparecerão aqui depois que você registrar compras.</div>';return;}list.forEach(n=>{const rows=priceRows(n.toLocaleLowerCase('pt-BR'));const d=document.createElement('div');d.className='record';const head=document.createElement('div');head.className='recordhead';const title=document.createElement('div');title.className='recordtitle';title.textContent=n;const price=document.createElement('strong');price.textContent=rows.length?money(rows[0].price)+' / '+rows[0].unit:'Ainda sem histórico';head.append(title,price);d.appendChild(head);if(rows.length){const small=document.createElement('div');small.className='small';small.textContent='Último registro: '+rows[0].date.split('-').reverse().join('/')+(rows[0].market?' · '+rows[0].market:'');d.appendChild(small);}const btn=document.createElement('button');btn.className='btn secondary';btn.style.marginTop='8px';btn.textContent='Adicionar à compra';btn.onclick=()=>{switchTab('buy');$('productName').value=n;showLastPrice();};d.appendChild(btn);el.appendChild(d);});renderPriceCompare();}
 function renderHistory(){
  const purchases=state.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
- $('allTimeTotal').textContent=money(state.purchases.reduce((s,c)=>s+((Array.isArray(c.items)?c.items.reduce((ss,i)=>ss+lineTotal(i),0):(Number(c.total)||0))),0));
+ $('allTimeTotal').textContent=money(state.purchases.reduce((s,c)=>s+(Number(c.items||[]).reduce((ss,i)=>ss+lineTotal(i),0)),0));
  $('purchaseCount').textContent=purchases.length+' '+(purchases.length===1?'compra salva':'compras salvas');
  const el=$('historyList');el.innerHTML='';
  if(!purchases.length){el.innerHTML='<div class="empty">Finalize uma compra para criar seu histórico.</div>';return;}
@@ -243,57 +243,33 @@ function exportBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type
 function importBackup(){
  const file=$('importFile').files[0];
  if(!file)return;
-
  const r=new FileReader();
-
  r.onload=()=>{
-  let x;
-
   try{
-   const raw=String(r.result||'').replace(/^\uFEFF/,'').trim();
-   x=JSON.parse(raw);
-
-   if(!x || typeof x!=='object' ||
-      !Array.isArray(x.purchases) ||
-      !Array.isArray(x.cart)){
-    throw new Error('O arquivo não tem a estrutura esperada.');
+   const raw=String(r.result||'').replace(/^\\uFEFF/,'').trim();
+   const x=JSON.parse(raw);
+   if(!x||typeof x!=='object'||!Array.isArray(x.purchases)||!Array.isArray(x.cart)){
+    throw new Error('Estrutura do backup não reconhecida');
    }
-  }catch(e){
-   alert('Erro ao ler o backup: '+(e.message||e));
-   $('importFile').value='';
-   return;
-  }
-
-  if(!confirm('Importar backup e substituir os dados atuais?')){
-   $('importFile').value='';
-   return;
-  }
-
-  try{
+   if(!confirm('Importar backup e substituir os dados atuais?'))return;
    state={...state,...x};
-   state.purchases=x.purchases;
-   state.cart=x.cart;
+   state.purchases=Array.isArray(x.purchases)?x.purchases:[];
+   state.cart=Array.isArray(x.cart)?x.cart:[];
    state.shoppingList=Array.isArray(x.shoppingList)?x.shoppingList:[];
    state.productMeta=x.productMeta&&typeof x.productMeta==='object'?x.productMeta:{};
    state.barcodeMap=x.barcodeMap&&typeof x.barcodeMap==='object'?x.barcodeMap:{};
-
    save();
-
-   alert('Backup importado! Compras encontradas: '+state.purchases.length+'. Abra a aba Histórico para conferir.');
+   alert('Backup importado. Compras encontradas: '+state.purchases.length+'. Abra a aba Histórico para conferir.');
   }catch(e){
-   alert('O JSON foi lido, mas ocorreu uma falha ao salvar ou atualizar o aplicativo: '+(e.message||e));
+   alert('Não foi possível importar este arquivo. Selecione o backup JSON exportado pelo Meu Mercado (arquivo .json), não o ZIP do projeto nem um arquivo HTML.');
   }finally{
    $('importFile').value='';
   }
  };
-
- r.onerror=()=>{
-  alert('Não foi possível ler o arquivo. Tente selecioná-lo novamente.');
-  $('importFile').value='';
- };
-
+ r.onerror=()=>{alert('Não foi possível ler o arquivo. Tente selecioná-lo novamente.');$('importFile').value='';};
  r.readAsText(file,'UTF-8');
 }
+
 let receiptRows=[];
 async function readReceiptFile(){
   const file=$('receiptFile').files[0]; if(!file){$('receiptStatus').textContent='Escolha primeiro uma foto, PDF, XML ou TXT.';return;}
@@ -337,59 +313,54 @@ function parseNFeXml(xmlText){
 function parseReceiptText(text){
  const rows=[];
  const clean=s=>String(s||'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
- // Brazilian receipt numbers: 1.234,56 or 39,90; OCR may also produce 39.90.
  const num=s=>{
   let v=String(s||'').trim().replace(/[R$\s]/g,'');
   if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');
   else if((v.match(/\./g)||[]).length>1)v=v.replace(/\./g,'');
-  const n=Number(v);return n;
+  return Number(v);
  };
  const add=(name,q,unit,price,total)=>{
   name=clean(name)
-   .replace(/\s*\(C[oó]digo\s*:\s*[^)]*\)/ig,'')
-   .replace(/\s*\(Codigo\s*:\s*[^)]*\)/ig,'')
+   .replace(/\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*[^)]*\)/ig,'')
    .replace(/\bVl\.?\s*Total\b/ig,'')
    .replace(/^[\s:;.,-]+|[\s:;.,-]+$/g,'').trim();
-  name=name.replace(/\b(?:Código|Codigo)\s*:?$/i,'').trim();
   if(!name||name.length<2||!Number.isFinite(price)||price<=0||!Number.isFinite(q)||q<=0)return;
-  if(rows.some(r=>r.name.toLowerCase()===name.toLowerCase()&&Math.abs(r.q-q)<0.0001&&Math.abs(r.price-price)<0.01))return;
+  // Do not collapse identical-looking lines: receipts may legitimately repeat a product.
   rows.push({id:'receipt-'+Date.now()+'-'+rows.length,name,price,unit,q,discount:0,selected:true,receiptTotal:Number.isFinite(total)?total:null});
  };
  let t=String(text||'').replace(/\u00a0/g,' ').replace(/\r/g,'\n');
- t=t.replace(/\(\s*(?:C[oó]digo|Codigo)\s*:\s*\n?\s*/ig,'(Código: ');
- t=t.replace(/\n+\s*((?:AR)?[A-Z0-9]{4,})\s*\)/ig,'$1 )');
- t=t.replace(/\bQtde\s*\.\s*:\s*/ig,'Qtde.: ')
-      .replace(/\bVl\s*\.\s*Unit\s*\.\s*:\s*/ig,'Vl. Unit.: ');
- const norm=clean(t);
- // Flexible repeated-item pattern; accepts OCR punctuation/spacing variations.
- const re=/([A-ZÀ-Ü0-9][A-ZÀ-Ü0-9 .\/_-]{1,100}?)\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*([A-Z0-9]+)\s*\)\s*(?:Vl\.?\s*Total\s*)?Qtde\.?\s*:\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+Vl\.?\s*Unit\.?\s*:\s*([\d.,]+)\s+([\d.,]+)/ig;
+ // Normalize OCR variants, including punctuation that OCR often inserts around labels.
+ t=t.replace(/\bQtde\s*\.?\s*:\s*/ig,'Qtde: ')
+    .replace(/\bUN\s*:\s*/ig,'UN: ')
+    .replace(/\bVl\s*\.?\s*Unit\s*\.?\s*:\s*/ig,'Vl Unit: ')
+    .replace(/\bVl\s*\.?\s*Total\b/ig,'Vl Total');
+ const lines=String(t).split('\n').map(clean).filter(Boolean);
+ const all=clean(t);
+ // Primary pattern: item name/code, then quantity, unit, unit price and line total.
+ // Allows the OCR text to put "Vl. Total" before "Qtde" as in the user's receipt.
+ const re=/([A-ZÀ-Ü0-9][A-ZÀ-Ü0-9 .\/_-]{1,100}?)\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*([A-Z0-9]+)\s*\)\s*(?:Vl\s*Total\s*)?Qtde\s*:\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+Vl\s*Unit\s*:\s*([\d.,]+)\s+([\d.,]+)/ig;
  let m;
- while((m=re.exec(norm))!==null){
+ while((m=re.exec(all))!==null){
   const raw=m[4].toUpperCase();
   const unit=/^K(G|Q)/.test(raw)?'kg':/^(L|LT|LTR)/.test(raw)?'L':'un';
   add(m[1],num(m[3]),unit,num(m[5]),num(m[6]));
  }
  if(rows.length)return rows;
- // Generic OCR fallback: identify quantity/unit-price/total even when labels are split across lines.
- const lines=String(text||'').replace(/\r/g,'\n').split('\n').map(clean).filter(Boolean);
+ // Fallback: OCR sometimes splits labels across lines or omits punctuation.
  for(let i=0;i<lines.length;i++){
-  const nameMatch=lines[i].match(/^(.+?)\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*([A-Z0-9]+)\s*\)/i);
-  if(!nameMatch)continue;
-  const block=clean(lines.slice(i,i+6).join(' '));
-  const d=block.match(/Qtde\.?\s*:\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+Vl\.?\s*Unit\.?\s*:\s*([\d.,]+)\s+([\d.,]+)/i);
-  if(d){
-   const raw=d[2].toUpperCase(),u=/^K(G|Q)/.test(raw)?'kg':/^(L|LT|LTR)/.test(raw)?'L':'un';
-   add(nameMatch[1],num(d[1]),u,num(d[3]),num(d[4]));
-  }
+  const nm=lines[i].match(/^(.+?)\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*([A-Z0-9]+)\s*\)/i);
+  if(!nm)continue;
+  const block=clean(lines.slice(i,i+8).join(' '));
+  const d=block.match(/Qtde\s*:?\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+Vl\s*Unit\s*:?\s*([\d.,]+)\s+([\d.,]+)/i);
+  if(d){const raw=d[2].toUpperCase(),u=/^K(G|Q)/.test(raw)?'kg':/^(L|LT|LTR)/.test(raw)?'L':'un';add(nm[1],num(d[1]),u,num(d[3]),num(d[4]));}
  }
- // Last-resort generic line parser for common POS receipt layouts: NAME QTY UNIT PRICE TOTAL.
- if(!rows.length){
-  for(const line of lines){
-   const m=line.match(/^(.{2,60}?)\s+(\d+(?:[.,]\d+)?)\s+(KG|KG\d*|UN|UNID|UND|LT|L)\s+(?:R\$\s*)?(\d+(?:[.,]\d{1,3})?)\s+(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)$/i);
-   if(!m)continue;
-   const raw=m[3].toUpperCase(),u=/^KG/.test(raw)?'kg':/^(LT|L)$/.test(raw)?'L':'un';
-   add(m[1],num(m[2]),u,num(m[4]),num(m[5]));
-  }
+ if(rows.length)return rows;
+ // Last-resort common POS layout: NAME QTY UNIT PRICE TOTAL.
+ for(const line of lines){
+  const d=line.match(/^(.{2,80}?)\s+(\d+(?:[.,]\d+)?)\s+(KG\d*|KG|UN|UNID|UND|LT|L)\s+(?:R\$\s*)?(\d+(?:[.,]\d{1,3})?)\s+(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)$/i);
+  if(!d)continue;
+  const raw=d[3].toUpperCase(),u=/^KG/.test(raw)?'kg':/^(LT|L)$/.test(raw)?'L':'un';
+  add(d[1],num(d[2]),u,num(d[4]),num(d[5]));
  }
  return rows;
 }
