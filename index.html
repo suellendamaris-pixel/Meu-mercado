@@ -218,26 +218,37 @@ function addShoppingListItem(){
 }
 function renderShoppingList(){
  const el=$('shoppingListItems');if(!el)return;el.innerHTML='';
- const list=state.shoppingList||[];
+ const list=Array.isArray(state.shoppingList)?state.shoppingList:[];
  if(!list.length){el.innerHTML='<div class="empty">Sua lista está vazia. Adicione o que precisa comprar.</div>';return;}
- list.forEach(item=>{
-  const row=document.createElement('div');row.className='record';
-  const label=document.createElement('label');label.style.display='flex';label.style.gap='10px';label.style.alignItems='center';
-  const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!item.checked;cb.onchange=()=>{item.checked=cb.checked;save();};
-  const txt=document.createElement('div');txt.style.flex='1';txt.innerHTML='<strong></strong><div class="small"></div>';txt.querySelector('strong').textContent=item.name;txt.querySelector('.small').textContent='Quantidade: '+item.q+(item.note?' · '+item.note:'');
-  label.append(cb,txt);row.appendChild(label);
-  const buttons=document.createElement('div');buttons.className='btnrow';
-  const add=document.createElement('button');add.className='btn secondary';add.textContent='Levar ao carrinho';add.onclick=()=>{
-   switchTab('buy');$('productName').value=item.name;$('qty').value=item.q;showLastPrice();
-  };
-  const edit=document.createElement('button');edit.className='btn outline';edit.textContent='Editar';edit.onclick=()=>{
-   const name=prompt('Nome do produto:',item.name);if(name===null)return;
-   const q=Number((prompt('Quantidade:',String(item.q))||'').replace(',','.'));const note=prompt('Observação:',item.note||'');if(!name.trim()||!Number.isFinite(q)||q<=0)return;
-   Object.assign(item,{name:name.trim(),q,note:note||''});save();
-  };
-  const del=document.createElement('button');del.className='btn danger';del.textContent='Excluir';del.onclick=()=>{state.shoppingList=state.shoppingList.filter(x=>x.id!==item.id);save();};
-  buttons.append(add,edit,del);row.appendChild(buttons);el.appendChild(row);
- });
+ const pending=list.filter(item=>!item.checked);
+ const completed=list.filter(item=>!!item.checked);
+ const renderGroup=(title,items,done)=>{
+  const section=document.createElement('section');section.style.marginBottom='14px';
+  const heading=document.createElement('h3');heading.style.margin='12px 0 8px';heading.style.fontSize='1rem';heading.textContent=title+' ('+items.length+')';section.appendChild(heading);
+  if(!items.length){const empty=document.createElement('div');empty.className='small';empty.textContent=done?'Nenhum produto comprado ainda.':'Nenhum produto pendente.';section.appendChild(empty);}
+  items.forEach(item=>{
+   const row=document.createElement('div');row.className='record';
+   const label=document.createElement('label');label.style.display='flex';label.style.gap='10px';label.style.alignItems='center';
+   const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!item.checked;cb.setAttribute('aria-label',(done?'Desmarcar como comprado: ':'Marcar como comprado: ')+item.name);cb.onchange=()=>{item.checked=cb.checked;save();};
+   const txt=document.createElement('div');txt.style.flex='1';txt.innerHTML='<strong></strong><div class="small"></div>';txt.querySelector('strong').textContent=item.name;txt.querySelector('.small').textContent='Quantidade: '+item.q+(item.note?' · '+item.note:'');
+   if(done)txt.querySelector('strong').style.textDecoration='line-through';
+   label.append(cb,txt);row.appendChild(label);
+   const buttons=document.createElement('div');buttons.className='btnrow';
+   const add=document.createElement('button');add.className='btn secondary';add.textContent='Levar ao carrinho';add.onclick=()=>{
+    switchTab('buy');$('productName').value=item.name;$('qty').value=item.q;showLastPrice();
+   };
+   const edit=document.createElement('button');edit.className='btn outline';edit.textContent='Editar';edit.onclick=()=>{
+    const name=prompt('Nome do produto:',item.name);if(name===null)return;
+    const q=Number((prompt('Quantidade:',String(item.q))||'').replace(',','.'));const note=prompt('Observação:',item.note||'');if(!name.trim()||!Number.isFinite(q)||q<=0)return;
+    Object.assign(item,{name:name.trim(),q,note:note||''});save();
+   };
+   const del=document.createElement('button');del.className='btn danger';del.textContent='Excluir';del.onclick=()=>{if(confirm('Excluir este produto da lista?')){state.shoppingList=state.shoppingList.filter(x=>x.id!==item.id);save();}};
+   buttons.append(add,edit,del);row.appendChild(buttons);section.appendChild(row);
+  });
+  el.appendChild(section);
+ };
+ renderGroup('Pendentes',pending,false);
+ renderGroup('Comprados',completed,true);
 }
 function renderReports(){const a=$('monthA').value||monthNow(),b=$('monthB').value||monthNow();const sum=m=>(Array.isArray(state.purchases)?state.purchases:[]).filter(c=>(c.date||'').slice(0,7)===m).reduce((s,c)=>s+(Array.isArray(c.items)?c.items.reduce((ss,i)=>ss+lineTotal(i),0):Number(c.total)||0),0);const av=sum(a),bv=sum(b),diff=bv-av;$('monthALabel').textContent=a;$('monthBLabel').textContent=b;$('monthATotal').textContent=money(av);$('monthBTotal').textContent=money(bv);$('monthDiff').textContent=(diff>0?'+':diff<0?'−':'')+money(Math.abs(diff));$('monthDiff').style.color=diff>0?'#b42318':diff<0?'#176b4d':'inherit';$('reportNote').textContent=diff>0?'Você registrou gastos maiores no mês final.':diff<0?'Você registrou gastos menores no mês final.':'Os totais registrados são iguais.';drawChart();renderPriceCompare();}
 function drawChart(){const canvas=$('chart'),ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);const months={};(Array.isArray(state.purchases)?state.purchases:[]).forEach(c=>{const m=(c.date||'').slice(0,7);if(!m)return;const total=Array.isArray(c.items)?c.items.reduce((ss,i)=>ss+lineTotal(i),0):(Number(c.total)||0);months[m]=(months[m]||0)+total;});const keys=Object.keys(months).sort().slice(-6);if(!keys.length){ctx.fillStyle='#64736a';ctx.font='16px system-ui';ctx.textAlign='center';ctx.fillText('Finalize compras para ver o gráfico',w/2,h/2);return;}const max=Math.max(...keys.map(k=>months[k]),1),pad=38,chartH=h-60,barW=Math.min(54,(w-2*pad)/keys.length*.58),gap=(w-2*pad)/keys.length;ctx.strokeStyle='#dce5df';ctx.beginPath();ctx.moveTo(pad,chartH+8);ctx.lineTo(w-pad,chartH+8);ctx.stroke();keys.forEach((k,i)=>{const bh=months[k]/max*chartH,x=pad+i*gap+(gap-barW)/2,y=chartH+8-bh;ctx.fillStyle='#176b4d';ctx.beginPath();ctx.roundRect(x,y,barW,bh,5);ctx.fill();ctx.fillStyle='#17231d';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(k.slice(5)+'/'+k.slice(2,4),x+barW/2,h-16);ctx.fillStyle='#64736a';ctx.font='10px system-ui';ctx.fillText(months[k]>=1000?(months[k]/1000).toFixed(1)+'k':Math.round(months[k]).toString(),x+barW/2,Math.max(12,y-5));});}
