@@ -216,12 +216,36 @@ function addShoppingListItem(){
  state.shoppingList=state.shoppingList||[];state.shoppingList.push({id:'list-'+Date.now(),name,q,note,checked:false});
  $('listName').value='';$('listQty').value='1';$('listNote').value='';save();switchTab('list');
 }
+function shoppingListKnownPrice(item){
+ const name=String(item&&item.name||'').trim().toLocaleLowerCase('pt-BR');
+ if(!name)return null;
+ const rows=priceRows(name);
+ if(rows.length&&Number.isFinite(Number(rows[0].price))&&Number(rows[0].price)>0){
+  return {price:Number(rows[0].price),unit:rows[0].unit||'un',date:rows[0].date||'',market:rows[0].market||'',source:'histórico'};
+ }
+ const meta=state.productMeta&&state.productMeta[name];
+ if(meta&&Number.isFinite(Number(meta.lastPrice))&&Number(meta.lastPrice)>0){
+  return {price:Number(meta.lastPrice),unit:meta.unit||'un',date:meta.lastDate||'',market:'',source:'memória de preços'};
+ }
+ return null;
+}
 function renderShoppingList(){
  const el=$('shoppingListItems');if(!el)return;el.innerHTML='';
  const list=Array.isArray(state.shoppingList)?state.shoppingList:[];
  if(!list.length){el.innerHTML='<div class="empty">Sua lista está vazia. Adicione o que precisa comprar.</div>';return;}
  const pending=list.filter(item=>!item.checked);
  const completed=list.filter(item=>!!item.checked);
+ let estimatedTotal=0,withoutPrice=0;
+ pending.forEach(item=>{
+  const known=shoppingListKnownPrice(item),q=Number(item.q);
+  if(known&&Number.isFinite(q)&&q>0)estimatedTotal+=q*known.price;
+  else withoutPrice++;
+ });
+ const estimate=document.createElement('div');estimate.className='kpi';estimate.style.marginBottom='14px';
+ const estimateLabel=document.createElement('div');estimateLabel.className='muted';estimateLabel.textContent='Total estimado dos produtos pendentes';
+ const estimateValue=document.createElement('div');estimateValue.className='value';estimateValue.textContent=money(estimatedTotal);
+ const estimateNote=document.createElement('div');estimateNote.className='muted';estimateNote.textContent='Calculado com os preços conhecidos mais recentes e as quantidades informadas. '+(withoutPrice?withoutPrice+' produto(s) pendente(s) sem preço conhecido não entram no total.':'Todos os produtos pendentes têm preço conhecido.');
+ estimate.append(estimateLabel,estimateValue,estimateNote);el.appendChild(estimate);
  const renderGroup=(title,items,done)=>{
   const section=document.createElement('section');section.style.marginBottom='14px';
   const heading=document.createElement('h3');heading.style.margin='12px 0 8px';heading.style.fontSize='1rem';heading.textContent=title+' ('+items.length+')';section.appendChild(heading);
@@ -230,7 +254,11 @@ function renderShoppingList(){
    const row=document.createElement('div');row.className='record';
    const label=document.createElement('label');label.style.display='flex';label.style.gap='10px';label.style.alignItems='center';
    const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!item.checked;cb.setAttribute('aria-label',(done?'Desmarcar como comprado: ':'Marcar como comprado: ')+item.name);cb.onchange=()=>{item.checked=cb.checked;save();};
-   const txt=document.createElement('div');txt.style.flex='1';txt.innerHTML='<strong></strong><div class="small"></div>';txt.querySelector('strong').textContent=item.name;txt.querySelector('.small').textContent='Quantidade: '+item.q+(item.note?' · '+item.note:'');
+   const txt=document.createElement('div');txt.style.flex='1';txt.innerHTML='<strong></strong><div class="small"></div><div class="small priceEstimate"></div>';txt.querySelector('strong').textContent=item.name;txt.querySelector('.small').textContent='Quantidade: '+item.q+(item.note?' · '+item.note:'');
+   const priceLine=txt.querySelector('.priceEstimate'),known=shoppingListKnownPrice(item),q=Number(item.q);
+   if(known&&Number.isFinite(q)&&q>0){
+    priceLine.textContent='Preço conhecido: '+money(known.price)+'/'+known.unit+' · subtotal estimado: '+money(q*known.price)+(known.date?' · registro de '+known.date.split('-').reverse().join('/'):'');
+   }else priceLine.textContent='Sem preço conhecido — não incluído no total estimado.';
    if(done)txt.querySelector('strong').style.textDecoration='line-through';
    label.append(cb,txt);row.appendChild(label);
    const buttons=document.createElement('div');buttons.className='btnrow';
