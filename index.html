@@ -296,6 +296,38 @@ function setShoppingListPrice(item){
  save();
  alert('Preço salvo na memória de preços para as próximas listas.');
 }
+function renderShoppingMarketEstimate(pending,container){
+ const card=document.createElement('div');card.className='card';card.style.margin='0 0 14px';card.style.padding='13px';
+ const title=document.createElement('h3');title.style.margin='0 0 8px';title.style.fontSize='1rem';title.textContent='🛒 Quanto sua lista custa em cada mercado?';card.appendChild(title);
+ const intro=document.createElement('p');intro.className='muted';intro.textContent='Estimativa com o preço mais recente registrado por produto em cada mercado. Para uma comparação justa, só são comparados registros na mesma unidade.';card.appendChild(intro);
+ const markets=[...new Set((Array.isArray(state.purchases)?state.purchases:[]).map(c=>String(c.market||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+ if(!pending.length){const note=document.createElement('div');note.className='status';note.textContent='Adicione ou deixe pendente algum produto para estimar o custo da lista.';card.appendChild(note);container.appendChild(card);return;}
+ if(!markets.length){const note=document.createElement('div');note.className='status';note.textContent='Ainda não há mercados identificados no histórico. Ao finalizar compras, preencha o nome do mercado para começar a comparação.';card.appendChild(note);container.appendChild(card);return;}
+ const details=pending.map(item=>{
+  const name=String(item.name||'').trim(),q=Number(item.q)||0,rows=priceRows(name.toLocaleLowerCase('pt-BR'));
+  const reference=rows.find(r=>r.unit);
+  const prices={};
+  markets.forEach(market=>{
+   const row=rows.find(r=>r.market===market&&(!reference||r.unit===reference.unit));
+   if(row&&q>0)prices[market]={price:row.price,unit:row.unit,date:row.date,total:q*row.price};
+  });
+  return {name,q,unit:reference?reference.unit:'',prices};
+ });
+ const summaries=markets.map(market=>{
+  let total=0,missing=0;
+  details.forEach(d=>{if(d.prices[market])total+=d.prices[market].total;else missing++;});
+  return {market,total,missing,complete:missing===0};
+ }).sort((a,b)=>Number(b.complete)-Number(a.complete)||(a.complete?a.total-b.total:a.missing-b.missing)||a.market.localeCompare(b.market,'pt-BR'));
+ const best=summaries.find(x=>x.complete);
+ if(best){const win=document.createElement('div');win.className='kpi';win.style.margin='10px 0';const label=document.createElement('div');label.className='muted';label.textContent='Menor custo estimado com todos os produtos';const value=document.createElement('div');value.className='value';value.textContent=money(best.total);const detail=document.createElement('div');detail.className='muted';detail.textContent=best.market+' tem o menor total entre os mercados com preço conhecido para toda a lista.';win.append(label,value,detail);card.appendChild(win);}
+ const summaryRows=summaries.map(x=>[x.market,x.missing?('Parcial: '+money(x.total)):money(x.total),x.missing?('Faltam '+x.missing+' produto(s)'):'Lista completa']);
+ addCompareTable(card,['Mercado','Custo estimado','Cobertura'],summaryRows);
+ const detailTitle=document.createElement('h4');detailTitle.style.margin='16px 0 6px';detailTitle.textContent='Detalhamento por produto';card.appendChild(detailTitle);
+ const detailRows=details.map(d=>[d.name,(d.q.toLocaleString('pt-BR')+' × '+d.unit||'').trim(),...markets.map(m=>d.prices[m]?money(d.prices[m].price)+'/'+d.prices[m].unit:'Sem preço')]);
+ addCompareTable(card,['Produto','Qtd. × unidade',...markets],detailRows);
+ const note=document.createElement('p');note.className='muted';note.style.marginTop='10px';note.textContent='Totais parciais não representam o custo completo da lista. Quantidade da lista é multiplicada pelo preço registrado por unidade; confira especialmente produtos vendidos por peso, volume ou embalagem. Mercados sem nome registrado não entram na comparação.';card.appendChild(note);
+ container.appendChild(card);
+}
 function renderShoppingList(){
  const el=$('shoppingListItems');if(!el)return;el.innerHTML='';
  const list=Array.isArray(state.shoppingList)?state.shoppingList:[];
@@ -313,6 +345,7 @@ function renderShoppingList(){
  const estimateValue=document.createElement('div');estimateValue.className='value';estimateValue.textContent=money(estimatedTotal);
  const estimateNote=document.createElement('div');estimateNote.className='muted';estimateNote.textContent='Calculado com os preços conhecidos mais recentes e as quantidades informadas. '+(withoutPrice?withoutPrice+' produto(s) pendente(s) sem preço conhecido não entram no total.':'Todos os produtos pendentes têm preço conhecido.');
  estimate.append(estimateLabel,estimateValue,estimateNote);el.appendChild(estimate);
+ renderShoppingMarketEstimate(pending,el);
  const renderGroup=(title,items,done)=>{
   const section=document.createElement('section');section.style.marginBottom='14px';
   const heading=document.createElement('h3');heading.style.margin='12px 0 8px';heading.style.fontSize='1rem';heading.textContent=title+' ('+items.length+')';section.appendChild(heading);
