@@ -321,10 +321,10 @@ function renderShoppingMarketEstimate(pending,container){
  const best=summaries.find(x=>x.complete);
  if(best){const win=document.createElement('div');win.className='kpi';win.style.margin='10px 0';const label=document.createElement('div');label.className='muted';label.textContent='Menor custo estimado com todos os produtos';const value=document.createElement('div');value.className='value';value.textContent=money(best.total);const detail=document.createElement('div');detail.className='muted';detail.textContent=best.market+' tem o menor total entre os mercados com preço conhecido para toda a lista.';win.append(label,value,detail);card.appendChild(win);}
  const summaryRows=summaries.map(x=>[x.market,x.missing?('Parcial: '+money(x.total)):money(x.total),x.missing?('Faltam '+x.missing+' produto(s)'):'Lista completa']);
- addCompareTable(card,['Mercado','Custo estimado','Cobertura'],summaryRows);
+ const summaryTable=document.createElement('div');card.appendChild(summaryTable);addCompareTable(summaryTable,['Mercado','Custo estimado','Cobertura'],summaryRows);
  const detailTitle=document.createElement('h4');detailTitle.style.margin='16px 0 6px';detailTitle.textContent='Detalhamento por produto';card.appendChild(detailTitle);
- const detailRows=details.map(d=>[d.name,(d.q.toLocaleString('pt-BR')+' × '+d.unit||'').trim(),...markets.map(m=>d.prices[m]?money(d.prices[m].price)+'/'+d.prices[m].unit:'Sem preço')]);
- addCompareTable(card,['Produto','Qtd. × unidade',...markets],detailRows);
+ const detailRows=details.map(d=>[d.name,d.q.toLocaleString('pt-BR')+' × '+(d.unit||'unidade não identificada'),...markets.map(m=>d.prices[m]?money(d.prices[m].price)+'/'+d.prices[m].unit:'Sem preço')]);
+ const detailTable=document.createElement('div');card.appendChild(detailTable);addCompareTable(detailTable,['Produto','Qtd. × unidade',...markets],detailRows);
  const note=document.createElement('p');note.className='muted';note.style.marginTop='10px';note.textContent='Totais parciais não representam o custo completo da lista. Quantidade da lista é multiplicada pelo preço registrado por unidade; confira especialmente produtos vendidos por peso, volume ou embalagem. Mercados sem nome registrado não entram na comparação.';card.appendChild(note);
  container.appendChild(card);
 }
