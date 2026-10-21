@@ -212,7 +212,7 @@ function renderProducts(){
   if(insight){
    const trend=document.createElement('div');trend.className='notice';
    if(insight.previous){trend.textContent=(insight.direction==='down'?'📉 Preço caiu':insight.direction==='up'?'📈 Preço subiu':'➖ Preço sem mudança')+' '+Math.abs(insight.percent).toLocaleString('pt-BR',{maximumFractionDigits:1})+'% em relação ao registro anterior comparável ('+money(insight.previousComparablePrice)+'/'+insight.compareUnit+').';}
-   if(insight.best){trend.textContent+=(trend.textContent?' ':'')+'Menor preço histórico comparável: '+money(insight.best.price)+'/'+insight.best.unit+' em '+(insight.best.market||'mercado não informado')+(insight.best.date?' ('+insight.best.date.split('-').reverse().join('/')+')':'')+'.';}
+   if(insight.best){trend.textContent+=(trend.textContent?' ':'')+'Menor preço histórico comparável: '+money(insight.best.comparePrice)+'/'+insight.best.compareUnit+' em '+(insight.best.market||'mercado não informado')+(insight.best.date?' ('+insight.best.date.split('-').reverse().join('/')+')':'')+'.';}
    d.appendChild(trend);
   }
   const actions=document.createElement('div');actions.className='btnrow';actions.style.marginTop='8px';
