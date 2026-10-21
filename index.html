@@ -87,6 +87,8 @@ dialog{border:0;border-radius:18px;width:min(94vw,500px);padding:18px;box-shadow
   <section class="panel" id="panel-list">
     <div class="card"><h2>📝 Lista de compras</h2><p class="muted">Planeje antes de ir ao mercado. Marque o que já colocou no carrinho.</p>
       <label class="field" for="listName">Produto</label><input class="input" id="listName" placeholder="Ex.: arroz, leite, carne">
+      <button class="btn voice" id="listVoiceBtn" type="button" style="margin-top:10px">🎙️ Adicionar à lista por voz</button>
+      <div id="listVoiceStatus" class="status" aria-live="polite">Ex.: “arroz, 2 pacotes” ou “carne, 2 quilos e 350 gramas”. Confira o produto e a quantidade antes de adicionar.</div>
       <div class="grid2"><div><label class="field" for="listQty">Quantidade</label><input class="input" id="listQty" type="number" min=".001" step=".001" value="1"></div><div><label class="field" for="listNote">Observação (opcional)</label><input class="input" id="listNote" placeholder="marca, tamanho..."></div></div>
       <button class="btn" id="listAddBtn" style="width:100%;margin-top:10px">＋ Adicionar à lista</button><div id="shoppingListItems"></div>
     </div>
@@ -134,7 +136,7 @@ let state={cart:[],purchases:[],shoppingList:[],budget:800,market:'',date:today(
 let recognition=null,stream=null,scanTimer=null,scanner=null,editingItemId=null;
 function load(){try{const x=JSON.parse(localStorage.getItem('meuMercadoData')||'{}');if(x&&typeof x==='object'&&!Array.isArray(x))state={...state,...x};}catch(e){}state.cart=Array.isArray(state.cart)?state.cart:[];state.purchases=(Array.isArray(state.purchases)?state.purchases:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,items:Array.isArray(c.items)?c.items:[]}));state.shoppingList=Array.isArray(state.shoppingList)?state.shoppingList:[];state.productMeta=state.productMeta&&typeof state.productMeta==='object'&&!Array.isArray(state.productMeta)?state.productMeta:{};state.barcodeMap=state.barcodeMap&&typeof state.barcodeMap==='object'&&!Array.isArray(state.barcodeMap)?state.barcodeMap:{};}
 function save(){try{localStorage.setItem('meuMercadoData',JSON.stringify(state));}catch(e){alert('Não foi possível salvar. Exporte um backup e libere espaço no aparelho.');}renderAll();}
-function init(){load();$('purchaseDate').value=state.date||today();$('market').value=state.market||'';$('budget').value=state.budget||800;$('monthA').value=monthNow().slice(0,4)+'-'+String(Math.max(1,Number(monthNow().slice(5))-1)).padStart(2,'0');$('monthB').value=monthNow();document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));['productName','unitPrice','qty','kg','grams','unit','discount'].forEach(id=>$(id).addEventListener('input',updateSubtotal));$('productName').addEventListener('change',showLastPrice);$('unit').addEventListener('change',()=>{$('kg').disabled=$('unit').value!=='kg';$('grams').disabled=$('unit').value!=='kg';updateSubtotal();});$('addBtn').onclick=addItem;$('clearFormBtn').onclick=()=>{clearForm();cancelEdit();};$('finishBtn').onclick=finishPurchase;$('budget').onchange=()=>{state.budget=Math.max(0,Number($('budget').value)||0);save();};$('market').onchange=()=>{state.market=$('market').value;save();};$('purchaseDate').onchange=()=>{state.date=$('purchaseDate').value||today();save();};$('voiceBtn').onclick=startVoice;$('stopVoiceBtn').onclick=stopVoice;$('scanBtn').onclick=startScanner;$('closeScan').onclick=closeScanner;$('productSearch').oninput=renderProducts;$('monthA').onchange=renderReports;$('monthB').onchange=renderReports;$('priceCompare').onchange=renderPriceCompare;$('exportBtn').onclick=exportBackup;$('importBtn').onclick=()=>$('importFile').click();$('importFile').onchange=importBackup;$('receiptImportBtn').onclick=()=>{$('receiptDialog').showModal();$('receiptStatus').textContent='Escolha uma foto ou arquivo para começar.';};$('receiptCloseBtn').onclick=()=>$('receiptDialog').close();$('receiptReadBtn').onclick=readReceiptFile;$('receiptQRPhotoBtn').onclick=readQRFromSelectedPhoto;$('receiptParseBtn').onclick=prepareReceiptPreview;$('receiptAddBtn').onclick=addReceiptItemsToCart;$('receiptQRBtn').onclick=scanReceiptQR;$('listAddBtn').onclick=addShoppingListItem;$('unit').dispatchEvent(new Event('change'));renderAll();if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});}
+function init(){load();$('purchaseDate').value=state.date||today();$('market').value=state.market||'';$('budget').value=state.budget||800;$('monthA').value=monthNow().slice(0,4)+'-'+String(Math.max(1,Number(monthNow().slice(5))-1)).padStart(2,'0');$('monthB').value=monthNow();document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));['productName','unitPrice','qty','kg','grams','unit','discount'].forEach(id=>$(id).addEventListener('input',updateSubtotal));$('productName').addEventListener('change',showLastPrice);$('unit').addEventListener('change',()=>{$('kg').disabled=$('unit').value!=='kg';$('grams').disabled=$('unit').value!=='kg';updateSubtotal();});$('addBtn').onclick=addItem;$('clearFormBtn').onclick=()=>{clearForm();cancelEdit();};$('finishBtn').onclick=finishPurchase;$('budget').onchange=()=>{state.budget=Math.max(0,Number($('budget').value)||0);save();};$('market').onchange=()=>{state.market=$('market').value;save();};$('purchaseDate').onchange=()=>{state.date=$('purchaseDate').value||today();save();};$('voiceBtn').onclick=startVoice;$('stopVoiceBtn').onclick=stopVoice;$('scanBtn').onclick=startScanner;$('closeScan').onclick=closeScanner;$('productSearch').oninput=renderProducts;$('monthA').onchange=renderReports;$('monthB').onchange=renderReports;$('priceCompare').onchange=renderPriceCompare;$('exportBtn').onclick=exportBackup;$('importBtn').onclick=()=>$('importFile').click();$('importFile').onchange=importBackup;$('receiptImportBtn').onclick=()=>{$('receiptDialog').showModal();$('receiptStatus').textContent='Escolha uma foto ou arquivo para começar.';};$('receiptCloseBtn').onclick=()=>$('receiptDialog').close();$('receiptReadBtn').onclick=readReceiptFile;$('receiptQRPhotoBtn').onclick=readQRFromSelectedPhoto;$('receiptParseBtn').onclick=prepareReceiptPreview;$('receiptAddBtn').onclick=addReceiptItemsToCart;$('receiptQRBtn').onclick=scanReceiptQR;$('listAddBtn').onclick=addShoppingListItem;$('listVoiceBtn').onclick=startShoppingListVoice;$('unit').dispatchEvent(new Event('change'));renderAll();if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});}
 function switchTab(t){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id==='panel-'+t));if(t==='products')renderProducts();if(t==='history')renderHistory();if(t==='reports')renderReports();if(t==='list')renderShoppingList();}
 function quantity(){if($('unit').value==='kg'){return Math.max(0,Number($('kg').value)||0)+(Math.max(0,Number($('grams').value)||0)/1000);}return Math.max(0,Number($('qty').value)||0);}
 function updateSubtotal(){const q=quantity(),p=Math.max(0,Number($('unitPrice').value)||0),d=Math.max(0,Number($('discount').value)||0);$('subtotal').textContent=money(Math.max(0,q*p-d));}
@@ -212,6 +214,52 @@ function renderHistory(){
   const del=document.createElement('button');del.className='btn danger';del.textContent='Excluir compra';del.onclick=()=>{if(confirm('Excluir esta compra inteira do histórico?')){state.purchases=state.purchases.filter(x=>x.id!==c.id);save();}};
   productsPanel.appendChild(add);actions.append(meta,del);d.appendChild(actions);el.appendChild(d);
  });
+}
+function startShoppingListVoice(){
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){$('listVoiceStatus').textContent='Este navegador não oferece reconhecimento de voz. Tente abrir o Meu Mercado no Google Chrome atualizado.';return;}
+ if(recognition){try{recognition.stop();}catch(e){}recognition=null;}
+ recognition=new SR();recognition.lang='pt-BR';recognition.continuous=false;recognition.interimResults=false;
+ $('listVoiceBtn').classList.add('listening');$('listVoiceBtn').textContent='🔴 Ouvindo… fale o produto e a quantidade';$('listVoiceStatus').textContent='Pode falar agora. Ex.: “arroz, 2 pacotes”.';
+ recognition.onresult=e=>{
+  const said=e.results[0][0].transcript;
+  $('listVoiceStatus').textContent='Reconhecido: “'+said+'”';
+  parseShoppingListVoice(said);
+ };
+ recognition.onerror=e=>{$('listVoiceStatus').textContent='Não foi possível reconhecer a fala ('+e.error+'). Você pode digitar os dados.';stopShoppingListVoice();};
+ recognition.onend=()=>stopShoppingListVoice(false);
+ try{recognition.start();}catch(e){$('listVoiceStatus').textContent='Não foi possível iniciar o microfone. Confira a permissão do navegador.';stopShoppingListVoice();}
+}
+function stopShoppingListVoice(stop=true){
+ if(recognition&&stop){try{recognition.stop();}catch(e){}}
+ recognition=null;$('listVoiceBtn').classList.remove('listening');$('listVoiceBtn').textContent='🎙️ Adicionar à lista por voz';
+}
+function parseShoppingListVoice(raw){
+ const said=String(raw||'').toLocaleLowerCase('pt-BR').replace(/[“”"]/g,'').trim();
+ let phrase=said.replace(/^(?:adiciona(?:r)?|coloca(?:r)?|anota(?:r)?|inclui(?:r)?|preciso de|comprar|compra|quero)\s+/i,'').trim();
+ let q=1, quantityFound=false;
+ // Pesos compostos, como "2 quilos e 350 gramas", são convertidos para kg decimal.
+ const weight=phrase.match(/\b(\d+(?:[.,]\d+)?)\s*(?:quilos?|kgs?)\s*(?:e\s*)?(\d+(?:[.,]\d+)?)?\s*(?:gramas?|g)\b/i);
+ if(weight){
+  q=Number(weight[1].replace(',','.'))+(weight[2]?Number(weight[2].replace(',','.'))/1000:0);
+  phrase=phrase.replace(weight[0],' ').replace(/\s+/g,' ').trim();quantityFound=true;
+ }else{
+  const qtyRe=/\b(\d+(?:[.,]\d+)?|zero|um|uma|dois|duas|três|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|meio|meia)\s*(?:unidades?|un|pacotes?|pct|caixas?|garrafas?|latas?|quilos?|kgs?|litros?|litros?|l|d[uú]zias?|gramas?|g)\b/i;
+  const match=phrase.match(qtyRe);
+  if(match){
+   const numberWord=match[1].toLocaleLowerCase('pt-BR');
+   const numeric=/^\d/.test(numberWord)?Number(numberWord.replace(',','.')):wordsNumber(numberWord);
+   if(Number.isFinite(numeric)&&numeric>0){q=numeric;quantityFound=true;phrase=phrase.replace(match[0],' ').replace(/\s+/g,' ').trim();}
+  }
+ }
+ phrase=phrase.replace(/\b(?:quantidade|de)\b/gi,' ').replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g,'').replace(/\s+/g,' ').trim();
+ if(!phrase){
+  $('listVoiceStatus').textContent='Não consegui identificar o nome do produto. Tente dizer, por exemplo: “arroz, 2 pacotes”.';
+  return;
+ }
+ $('listName').value=phrase.charAt(0).toLocaleUpperCase('pt-BR')+phrase.slice(1);
+ $('listQty').value=String(Math.round(q*1000)/1000);
+ $('listVoiceStatus').textContent='Confira o nome e a quantidade'+(quantityFound?' reconhecida':' (quantidade padrão: 1)')+' e toque em “Adicionar à lista”.';
 }
 function addShoppingListItem(){
  const name=$('listName').value.trim(),q=Number($('listQty').value)||1,note=$('listNote').value.trim();
