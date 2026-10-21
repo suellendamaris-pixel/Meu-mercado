@@ -168,7 +168,11 @@ function renderHistory(){
   const left=document.createElement('div');left.innerHTML='<div class="recordtitle"></div><div class="small"></div>';
   left.querySelector('.recordtitle').textContent=c.market||'Compra de mercado';
   left.querySelector('.small').textContent=(c.date||'').split('-').reverse().join('/')+' · '+itemsList.length+' itens';
-  const totalEl=document.createElement('strong');totalEl.textContent=money(total);h.append(left,totalEl);d.appendChild(h);
+  const totalEl=document.createElement('strong');totalEl.textContent=money(total);
+  const toggle=document.createElement('button');toggle.className='btn secondary';toggle.type='button';toggle.textContent='Mostrar produtos ('+itemsList.length+')';toggle.setAttribute('aria-expanded','false');
+  const productsPanel=document.createElement('div');productsPanel.style.display='none';productsPanel.className='purchase-products';
+  toggle.onclick=()=>{const expanded=productsPanel.style.display!=='none';productsPanel.style.display=expanded?'none':'block';toggle.textContent=(expanded?'Mostrar':'Ocultar')+' produtos ('+itemsList.length+')';toggle.setAttribute('aria-expanded',String(!expanded));};
+  const headTools=document.createElement('div');headTools.style.display='flex';headTools.style.flexDirection='column';headTools.style.alignItems='flex-end';headTools.style.gap='6px';headTools.append(totalEl,toggle);h.append(left,headTools);d.appendChild(h);
   const wrap=document.createElement('div');wrap.className='tablewrap';
   const table=document.createElement('table');table.className='historytable';
   table.innerHTML='<thead><tr><th>Produto</th><th class="num">Qtde.</th><th>Unid.</th><th class="num">Vlr. unitário</th><th class="num">Desconto</th><th class="num">Vlr. total</th><th>Ações</th></tr></thead><tbody></tbody>';
@@ -190,7 +194,7 @@ function renderHistory(){
    const delItem=document.createElement('button');delItem.className='iconbtn';delItem.style.marginLeft='4px';delItem.textContent='Excluir';delItem.onclick=()=>{if(confirm('Excluir “'+(item.name||'produto')+'” desta compra?')){c.items.splice(index,1);c.total=Math.round(c.items.reduce((sum,i)=>sum+lineTotal(i),0)*100)/100;save();}};
    actions.append(edit,delItem);tr.appendChild(actions);tbody.appendChild(tr);
   });
-  wrap.appendChild(table);d.appendChild(wrap);
+  wrap.appendChild(table);productsPanel.appendChild(wrap);d.appendChild(productsPanel);
   const actions=document.createElement('div');actions.className='historyactions';
   const add=document.createElement('button');add.className='btn secondary';add.textContent='＋ Adicionar item';add.onclick=()=>{
    const name=prompt('Nome do novo produto:');if(!name||!name.trim())return;
@@ -203,7 +207,7 @@ function renderHistory(){
   };
   const meta=document.createElement('button');meta.className='btn outline';meta.textContent='Editar data/mercado';meta.onclick=()=>{const date=prompt('Data da compra (AAAA-MM-DD):',c.date||today());if(date===null)return;const market=prompt('Nome do supermercado:',c.market||'');if(market===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){alert('Use o formato AAAA-MM-DD.');return;}c.date=date;c.market=market.trim();save();};
   const del=document.createElement('button');del.className='btn danger';del.textContent='Excluir compra';del.onclick=()=>{if(confirm('Excluir esta compra inteira do histórico?')){state.purchases=state.purchases.filter(x=>x.id!==c.id);save();}};
-  actions.append(add,meta,del);d.appendChild(actions);el.appendChild(d);
+  productsPanel.appendChild(add);actions.append(meta,del);d.appendChild(actions);el.appendChild(d);
  });
 }
 function addShoppingListItem(){
