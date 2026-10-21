@@ -219,15 +219,30 @@ function addShoppingListItem(){
 function shoppingListKnownPrice(item){
  const name=String(item&&item.name||'').trim().toLocaleLowerCase('pt-BR');
  if(!name)return null;
+ if(item&&Number.isFinite(Number(item.estimatedPrice))&&Number(item.estimatedPrice)>0)return {price:Number(item.estimatedPrice),unit:item.estimatedUnit||'un',date:item.estimatedDate||'',market:'',source:'preço informado na lista'};
  const rows=priceRows(name);
- if(rows.length&&Number.isFinite(Number(rows[0].price))&&Number(rows[0].price)>0){
-  return {price:Number(rows[0].price),unit:rows[0].unit||'un',date:rows[0].date||'',market:rows[0].market||'',source:'histórico'};
- }
+ const latest=rows.length&&Number.isFinite(Number(rows[0].price))&&Number(rows[0].price)>0?{price:Number(rows[0].price),unit:rows[0].unit||'un',date:rows[0].date||'',market:rows[0].market||'',source:'histórico'}:null;
  const meta=state.productMeta&&state.productMeta[name];
- if(meta&&Number.isFinite(Number(meta.lastPrice))&&Number(meta.lastPrice)>0){
-  return {price:Number(meta.lastPrice),unit:meta.unit||'un',date:meta.lastDate||'',market:'',source:'memória de preços'};
- }
- return null;
+ const remembered=meta&&Number.isFinite(Number(meta.lastPrice))&&Number(meta.lastPrice)>0?{price:Number(meta.lastPrice),unit:meta.unit||'un',date:meta.lastDate||'',market:'',source:'memória de preços'}:null;
+ if(remembered&&(!latest||(remembered.date||'')>=(latest.date||'')))return remembered;
+ return latest;
+}
+function setShoppingListPrice(item){
+ const current=shoppingListKnownPrice(item);
+ const raw=prompt('Preço por unidade ('+(current?current.unit:'un')+') em R$:',current?String(current.price).replace('.',','):'');
+ if(raw===null)return;
+ const price=Number(String(raw).trim().replace(',','.'));
+ if(!String(raw).trim()||!Number.isFinite(price)||price<=0){alert('Informe um preço maior que zero.');return;}
+ const unitRaw=prompt('Unidade do preço (un, kg, L, pct, dz):',current?current.unit:'un');
+ if(unitRaw===null)return;
+ const u=String(unitRaw||'un').trim().toLocaleLowerCase('pt-BR');
+ if(!['un','kg','l','pct','dz'].includes(u)){alert('Unidade inválida. Use un, kg, L, pct ou dz.');return;}
+ const unit=u==='l'?'L':u,date=today(),name=String(item.name||'').trim(),key=name.toLocaleLowerCase('pt-BR');
+ item.estimatedPrice=price;item.estimatedUnit=unit;item.estimatedDate=date;
+ state.productMeta=state.productMeta||{};
+ state.productMeta[key]={...(state.productMeta[key]||{}),name,unit,lastPrice:price,lastDate:date,priceSource:'lista de compras'};
+ save();
+ alert('Preço salvo na memória de preços para as próximas listas.');
 }
 function renderShoppingList(){
  const el=$('shoppingListItems');if(!el)return;el.innerHTML='';
@@ -265,13 +280,14 @@ function renderShoppingList(){
    const add=document.createElement('button');add.className='btn secondary';add.textContent='Levar ao carrinho';add.onclick=()=>{
     switchTab('buy');$('productName').value=item.name;$('qty').value=item.q;showLastPrice();
    };
+   const priceBtn=document.createElement('button');priceBtn.className='btn outline';priceBtn.textContent=known?'Ajustar preço':'Informar preço';priceBtn.onclick=()=>setShoppingListPrice(item);
    const edit=document.createElement('button');edit.className='btn outline';edit.textContent='Editar';edit.onclick=()=>{
     const name=prompt('Nome do produto:',item.name);if(name===null)return;
     const q=Number((prompt('Quantidade:',String(item.q))||'').replace(',','.'));const note=prompt('Observação:',item.note||'');if(!name.trim()||!Number.isFinite(q)||q<=0)return;
     Object.assign(item,{name:name.trim(),q,note:note||''});save();
    };
    const del=document.createElement('button');del.className='btn danger';del.textContent='Excluir';del.onclick=()=>{if(confirm('Excluir este produto da lista?')){state.shoppingList=state.shoppingList.filter(x=>x.id!==item.id);save();}};
-   buttons.append(add,edit,del);row.appendChild(buttons);section.appendChild(row);
+   buttons.append(add,priceBtn,edit,del);row.appendChild(buttons);section.appendChild(row);
   });
   el.appendChild(section);
  };
