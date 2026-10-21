@@ -155,11 +155,73 @@ function cartTotal(){return state.cart.reduce((s,x)=>s+lineTotal(x),0);}
 function renderCart(){const total=cartTotal();$('grandTotal').textContent=money(total);$('cartTotal').textContent=money(total);$('itemCount').textContent=state.cart.length+' '+(state.cart.length===1?'item':'itens');const budget=Number(state.budget)||0;$('budgetLabel').textContent='Orçamento: '+money(budget);$('budgetPct').textContent=(budget?Math.round(total/budget*100):0)+'% utilizado';$('budgetBar').style.width=(budget?Math.min(100,total/budget*100):0)+'%';const el=$('cartList');if(!state.cart.length){el.className='empty';el.textContent='Seu carrinho está vazio. Adicione o primeiro produto.';return;}el.className='';el.innerHTML='';state.cart.forEach(x=>{const div=document.createElement('div');div.className='item';div.innerHTML=`<div class="iteminfo"><div class="itemname"></div><div class="small"></div><div class="btnrow"><button class="iconbtn minus">−</button><button class="iconbtn plus">＋</button><button class="iconbtn edit">Editar</button><button class="iconbtn del">Remover</button></div></div><div class="price"></div>`;div.querySelector('.itemname').textContent=x.name;div.querySelector('.small').textContent=(x.q.toLocaleString('pt-BR')+' '+x.unit+' × '+money(x.price)+'/'+x.unit)+((Number(x.discount)||0)>0?' · desconto '+money(x.discount):'');div.querySelector('.price').textContent=money(lineTotal(x));div.querySelector('.minus').onclick=()=>changeQty(x.id,-(x.unit==='kg'?.1:1));div.querySelector('.plus').onclick=()=>changeQty(x.id,x.unit==='kg'?.1:1);div.querySelector('.edit').onclick=()=>editItem(x.id);div.querySelector('.del').onclick=()=>removeItem(x.id);el.appendChild(div);});}
 function finishPurchase(){if(!state.cart.length){alert('Adicione pelo menos um produto antes de finalizar.');return;}const purchase={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),date:$('purchaseDate').value||today(),market:$('market').value.trim(),items:state.cart.map(x=>({...x})),total:Math.round(cartTotal()*100)/100};state.purchases.push(purchase);state.cart=[];state.date=purchase.date;state.market=purchase.market;save();switchTab('history');alert('Compra salva neste aparelho!');}
 function packageComparison(item,effectivePrice){const size=Math.max(0,Number(item&&item.packageSize)||0),u=String(item&&item.packageUnit||'');if(size>0&&['g','kg','ml','L'].includes(u)){const dimension=['g','kg'].includes(u)?'kg':'L',amount=(u==='g'||u==='ml')?size/1000:size;if(amount>0)return {price:effectivePrice/amount,unit:dimension};}if(item&&item.unit==='kg')return {price:effectivePrice,unit:'kg'};if(item&&item.unit==='L')return {price:effectivePrice,unit:'L'};return null;}function priceRows(name){return (Array.isArray(state.purchases)?state.purchases:[]).flatMap(c=>(Array.isArray(c.items)?c.items:[]).filter(i=>i&&i.name&&i.name.trim().toLocaleLowerCase('pt-BR')===name).map(i=>{const q=Math.max(0,Number(i.q)||0),listed=Math.max(0,Number(i.price)||0),discount=Math.max(0,Number(i.discount)||0),price=q>0?Math.max(0,q*listed-discount)/q:listed,normalized=packageComparison(i,price);return {price,listedPrice:listed,discount,q,unit:i.unit||'un',packageSize:Math.max(0,Number(i.packageSize)||0)||null,packageUnit:i.packageUnit||'',comparisonPrice:normalized?normalized.price:null,comparisonUnit:normalized?normalized.unit:'',date:c.date||'',market:(c.market||'').trim()||'Mercado não informado',purchaseId:c.id||''};})).sort((a,b)=>b.date.localeCompare(a.date));}
+function priceInsights(name){
+ const key=String(name||'').trim().toLocaleLowerCase('pt-BR');
+ const rows=priceRows(key);
+ if(!rows.length)return null;
+ const latest=rows[0];
+ const comparable=(a,b)=>{
+  if(a.unit===b.unit)return {aPrice:a.price,bPrice:b.price,unit:a.unit};
+  if(a.comparisonPrice!==null&&b.comparisonPrice!==null&&a.comparisonUnit===b.comparisonUnit)return {aPrice:a.comparisonPrice,bPrice:b.comparisonPrice,unit:a.comparisonUnit};
+  return null;
+ };
+ let previous=null,previousComparison=null;
+ for(let i=1;i<rows.length;i++){const c=comparable(latest,rows[i]);if(c){previous=rows[i];previousComparison=c;break;}}
+ const candidates=rows.map(row=>({row,comparison:comparable(latest,row)})).filter(x=>x.comparison);
+ let best=null;
+ candidates.forEach(x=>{if(!best||x.comparison.bPrice<best.comparison.bPrice)best={...x.row,price:x.row.price,unit:x.row.unit,comparePrice:x.comparison.bPrice,compareUnit:x.comparison.unit};});
+ let direction='same',delta=0,percent=0;
+ if(previous&&previousComparison){
+  delta=previousComparison.aPrice-previousComparison.bPrice;
+  percent=previousComparison.bPrice>0?(delta/previousComparison.bPrice)*100:0;
+  direction=delta<-.000001?'down':delta>.000001?'up':'same';
+ }
+ return {latest,previous,compareUnit:previousComparison?previousComparison.unit:latest.unit,latestComparablePrice:previousComparison?previousComparison.aPrice:latest.price,previousComparablePrice:previousComparison?previousComparison.bPrice:null,delta,percent,direction,best,savingsPerUnit:best&&best.unit===latest.unit?Math.max(0,latest.price-best.price):null};
+}
 function allProducts(){const m=new Map();[...state.purchases.flatMap(c=>Array.isArray(c.items)?c.items:[]),...state.cart].filter(i=>i&&typeof i.name==='string'&&i.name.trim()).forEach(i=>{const k=i.name.toLocaleLowerCase('pt-BR');if(!m.has(k))m.set(k,i.name);});return [...m.values()].sort((a,b)=>a.localeCompare(b,'pt-BR'));}
-function renderProducts(){const search=($('productSearch').value||'').toLocaleLowerCase('pt-BR');const list=allProducts().filter(n=>n.toLocaleLowerCase('pt-BR').includes(search));$('productSuggestions').innerHTML='';list.forEach(n=>{const o=document.createElement('option');o.value=n;$('productSuggestions').appendChild(o);});$('priceCompare').innerHTML='';list.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;$('priceCompare').appendChild(o);});const el=$('productList');el.innerHTML='';if(!list.length){el.innerHTML='<div class="empty">Seus produtos aparecerão aqui depois que você registrar compras.</div>';return;}list.forEach(n=>{const rows=priceRows(n.toLocaleLowerCase('pt-BR'));const d=document.createElement('div');d.className='record';const head=document.createElement('div');head.className='recordhead';const title=document.createElement('div');title.className='recordtitle';title.textContent=n;const price=document.createElement('strong');price.textContent=rows.length?money(rows[0].price)+' / '+rows[0].unit:'Ainda sem histórico';head.append(title,price);d.appendChild(head);if(rows.length){const small=document.createElement('div');small.className='small';small.textContent='Último registro: '+rows[0].date.split('-').reverse().join('/')+(rows[0].market?' · '+rows[0].market:'');d.appendChild(small);}const actions=document.createElement('div');actions.className='btnrow';actions.style.marginTop='8px';
-const btn=document.createElement('button');btn.className='btn secondary';btn.textContent='Adicionar à compra';btn.onclick=()=>{switchTab('buy');$('productName').value=n;showLastPrice();};
-const listBtn=document.createElement('button');listBtn.className='btn outline';listBtn.textContent='Adicionar à lista';listBtn.onclick=()=>{state.shoppingList=Array.isArray(state.shoppingList)?state.shoppingList:[];const existing=state.shoppingList.find(item=>!item.checked&&String(item.name||'').trim().toLocaleLowerCase('pt-BR')===n.toLocaleLowerCase('pt-BR'));if(existing){alert('Este produto já está na lista de compras pendentes.');switchTab('list');return;}const raw=prompt('Quantidade para a lista de compras:', '1');if(raw===null)return;const q=Number(String(raw).trim().replace(',','.'));if(!String(raw).trim()||!Number.isFinite(q)||q<=0){alert('Informe uma quantidade maior que zero.');return;}state.shoppingList.push({id:'list-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),name:n,q,note:'',checked:false});save();switchTab('list');};
-actions.append(btn,listBtn);d.appendChild(actions);el.appendChild(d);});renderPriceCompare();}
+function renderProducts(){
+ const search=($('productSearch').value||'').toLocaleLowerCase('pt-BR');
+ const list=allProducts().filter(n=>n.toLocaleLowerCase('pt-BR').includes(search));
+ $('productSuggestions').innerHTML='';
+ list.forEach(n=>{const o=document.createElement('option');o.value=n;$('productSuggestions').appendChild(o);});
+ $('priceCompare').innerHTML='';
+ list.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;$('priceCompare').appendChild(o);});
+ const el=$('productList');el.innerHTML='';
+ if(!list.length){el.innerHTML='<div class="empty">Seus produtos aparecerão aqui depois que você registrar compras.</div>';return;}
+ const alertRows=list.map(n=>({name:n,insight:priceInsights(n)})).filter(x=>x.insight&&x.insight.previous);
+ const alertCard=document.createElement('div');alertCard.className='card';alertCard.style.margin='0 0 14px';alertCard.style.padding='13px';
+ const alertTitle=document.createElement('h3');alertTitle.style.margin='0 0 8px';alertTitle.style.fontSize='1rem';alertTitle.textContent='🔔 Alertas de variação de preços';
+ alertCard.appendChild(alertTitle);
+ const alertIntro=document.createElement('p');alertIntro.className='muted';alertIntro.textContent='Comparação com o registro anterior disponível. Preços históricos não garantem o preço atual do mercado.';
+ alertCard.appendChild(alertIntro);
+ if(!alertRows.length){const empty=document.createElement('div');empty.className='small';empty.textContent='Ainda não há registros suficientes de produtos para comparar preços. Registre outra compra para gerar alertas.';alertCard.appendChild(empty);}
+ else{
+  const table=document.createElement('div');alertCard.appendChild(table);
+  const rows=alertRows.map(x=>{const i=x.insight;return [x.name,i.direction==='down'?'📉 Caiu':i.direction==='up'?'📈 Subiu':'➖ Sem mudança',money(i.latestComparablePrice)+'/'+i.compareUnit,money(i.previousComparablePrice)+'/'+i.compareUnit,(i.delta>0?'+':i.delta<0?'−':'')+money(Math.abs(i.delta))+' ('+(i.percent>0?'+':i.percent<0?'−':'')+Math.abs(i.percent).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%)'];});
+  addCompareTable(table,['Produto','Variação','Preço recente','Registro anterior','Diferença'],rows);
+ }
+ el.appendChild(alertCard);
+ list.forEach(n=>{
+  const rows=priceRows(n.toLocaleLowerCase('pt-BR')),insight=priceInsights(n);
+  const d=document.createElement('div');d.className='record';
+  const head=document.createElement('div');head.className='recordhead';
+  const title=document.createElement('div');title.className='recordtitle';title.textContent=n;
+  const price=document.createElement('strong');price.textContent=rows.length?money(rows[0].price)+' / '+rows[0].unit:'Ainda sem histórico';
+  head.append(title,price);d.appendChild(head);
+  if(rows.length){const small=document.createElement('div');small.className='small';small.textContent='Último registro: '+rows[0].date.split('-').reverse().join('/')+(rows[0].market?' · '+rows[0].market:'');d.appendChild(small);}
+  if(insight){
+   const trend=document.createElement('div');trend.className='notice';
+   if(insight.previous){trend.textContent=(insight.direction==='down'?'📉 Preço caiu':insight.direction==='up'?'📈 Preço subiu':'➖ Preço sem mudança')+' '+Math.abs(insight.percent).toLocaleString('pt-BR',{maximumFractionDigits:1})+'% em relação ao registro anterior comparável ('+money(insight.previousComparablePrice)+'/'+insight.compareUnit+').';}
+   if(insight.best){trend.textContent+=(trend.textContent?' ':'')+'Menor preço histórico comparável: '+money(insight.best.price)+'/'+insight.best.unit+' em '+(insight.best.market||'mercado não informado')+(insight.best.date?' ('+insight.best.date.split('-').reverse().join('/')+')':'')+'.';}
+   d.appendChild(trend);
+  }
+  const actions=document.createElement('div');actions.className='btnrow';actions.style.marginTop='8px';
+  const btn=document.createElement('button');btn.className='btn secondary';btn.textContent='Adicionar à compra';btn.onclick=()=>{switchTab('buy');$('productName').value=n;showLastPrice();};
+  const listBtn=document.createElement('button');listBtn.className='btn outline';listBtn.textContent='Adicionar à lista';listBtn.onclick=()=>{state.shoppingList=Array.isArray(state.shoppingList)?state.shoppingList:[];const existing=state.shoppingList.find(item=>!item.checked&&String(item.name||'').trim().toLocaleLowerCase('pt-BR')===n.toLocaleLowerCase('pt-BR'));if(existing){alert('Este produto já está na lista de compras pendentes.');switchTab('list');return;}const raw=prompt('Quantidade para a lista de compras:', '1');if(raw===null)return;const q=Number(String(raw).trim().replace(',','.'));if(!String(raw).trim()||!Number.isFinite(q)||q<=0){alert('Informe uma quantidade maior que zero.');return;}state.shoppingList.push({id:'list-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),name:n,q,note:'',checked:false});save();switchTab('list');};
+  actions.append(btn,listBtn);d.appendChild(actions);el.appendChild(d);
+ });
+ renderPriceCompare();
+}
 function renderHistory(){
  const purchases=(Array.isArray(state.purchases)?state.purchases:[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
  $('allTimeTotal').textContent=money(purchases.reduce((s,c)=>{const items=Array.isArray(c.items)?c.items:[];return s+(items.length?items.reduce((ss,i)=>ss+lineTotal(i),0):(Number(c.total)||0));},0));
@@ -346,6 +408,13 @@ function renderShoppingList(){
  const estimateValue=document.createElement('div');estimateValue.className='value';estimateValue.textContent=money(estimatedTotal);
  const estimateNote=document.createElement('div');estimateNote.className='muted';estimateNote.textContent='Calculado com os preços conhecidos mais recentes e as quantidades informadas. '+(withoutPrice?withoutPrice+' produto(s) pendente(s) sem preço conhecido não entram no total.':'Todos os produtos pendentes têm preço conhecido.');
  estimate.append(estimateLabel,estimateValue,estimateNote);el.appendChild(estimate);
+ let potentialSavings=0,savingsProducts=0;
+ pending.forEach(item=>{const q=Number(item.q),insight=priceInsights(item.name);if(insight&&insight.savingsPerUnit!==null&&Number.isFinite(q)&&q>0&&insight.savingsPerUnit>0){potentialSavings+=q*insight.savingsPerUnit;savingsProducts++;}});
+ const savingsCard=document.createElement('div');savingsCard.className='kpi';savingsCard.style.marginBottom='14px';
+ const savingsLabel=document.createElement('div');savingsLabel.className='muted';savingsLabel.textContent='💰 Economia potencial pelo menor preço já registrado';
+ const savingsValue=document.createElement('div');savingsValue.className='value';savingsValue.textContent=money(potentialSavings);
+ const savingsNote=document.createElement('div');savingsNote.className='muted';savingsNote.textContent=savingsProducts?savingsProducts+' produto(s) com histórico comparável. Estimativa baseada no preço mais recente versus o menor preço registrado na mesma unidade; não é garantia de oferta atual.':'Ainda não há produtos pendentes com histórico comparável suficiente para estimar economia.';
+ savingsCard.append(savingsLabel,savingsValue,savingsNote);el.appendChild(savingsCard);
  renderShoppingMarketEstimate(pending,el);
  const renderGroup=(title,items,done)=>{
   const section=document.createElement('section');section.style.marginBottom='14px';
@@ -360,6 +429,15 @@ function renderShoppingList(){
    if(known&&Number.isFinite(q)&&q>0){
     priceLine.textContent='Preço conhecido: '+money(known.price)+'/'+known.unit+' · subtotal estimado: '+money(q*known.price)+(known.date?' · registro de '+known.date.split('-').reverse().join('/'):'');
    }else priceLine.textContent='Sem preço conhecido — não incluído no total estimado.';
+   const insight=priceInsights(item.name);
+   if(insight){
+    const alertLine=document.createElement('div');alertLine.className='small';
+    const trend=insight.previous?(insight.direction==='down'?'📉 Caiu':insight.direction==='up'?'📈 Subiu':'➖ Sem mudança')+' '+Math.abs(insight.percent).toLocaleString('pt-BR',{maximumFractionDigits:1})+'% vs. registro anterior':'Aguardando outro registro para comparar';
+    const best=insight.best?' · menor histórico: '+money(insight.best.price)+'/'+insight.best.unit:'';
+    const saving=insight.savingsPerUnit!==null&&insight.savingsPerUnit>0&&Number.isFinite(q)&&q>0?' · economia potencial: '+money(insight.savingsPerUnit*q):'';
+    alertLine.textContent=trend+best+saving;
+    txt.appendChild(alertLine);
+   }
    if(done)txt.querySelector('strong').style.textDecoration='line-through';
    label.append(cb,txt);row.appendChild(label);
    const buttons=document.createElement('div');buttons.className='btnrow';
