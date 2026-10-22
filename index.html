@@ -539,41 +539,52 @@ function parseNFeXml(xmlText){
 }
 function parseReceiptText(text){
  const rows=[];
- const clean=s=>String(s||'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+ const clean=s=>String(s||'').replace(/\u00a0/g,' ').replace(/[|]/g,' ').replace(/\s+/g,' ').trim();
  const num=s=>{let v=String(s||'').trim().replace(/[R$\s]/g,'');if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');else if((v.match(/\./g)||[]).length>1)v=v.replace(/\./g,'');return Number(v);};
- const add=(name,q,unit,price,total)=>{
-  name=clean(name).replace(/\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*[^)]*\)/ig,'').replace(/\s*(?:V[Il1]\.?\s*Total)\s*$/i,'').replace(/^[\s:;.,-]+|[\s:;.,-]+$/g,'').trim();
-  if(!name||name.length<2||!Number.isFinite(price)||price<=0||!Number.isFinite(q)||q<=0)return;
-  // Avoid collapsing repeated products: identical names can be separate receipt lines.
-  const rawTotal=Number.isFinite(total)?total:null;
-  rows.push({id:'receipt-'+Date.now()+'-'+rows.length,name,price,unit,q,discount:0,selected:true,receiptTotal:rawTotal,priceNeedsReview:false});
+ const add=(name,q,unit,price,total,sourceLine)=>{
+  name=clean(name).replace(/\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*[^)]*\)/ig,'').replace(/\s*(?:V[Il1]\.\s*Total)\s*$/i,'').replace(/^[\s:;.,-]+|[\s:;.,-]+$/g,'').trim();
+  name=name.replace(/^\d{1,4}\s+(?=\d{8,14}\s)/,'').replace(/^\d{8,14}\s+/,'');
+  if(!name||name.length<2||!Number.isFinite(price)||price<=0||!Number.isFinite(q)||q<=0)return false;
+  if(/^(?:subtotal|total|total a pagar|valor pago|troco|desconto|dinheiro|cart[aã]o|pix|cpf|cnpj|consumidor|consulta|protocolo|nota fiscal|chave de acesso)\b/i.test(name))return false;
+  rows.push({id:'receipt-'+Date.now()+'-'+rows.length,name,price,unit,q,discount:0,selected:true,receiptTotal:Number.isFinite(total)?total:null,priceNeedsReview:Number.isFinite(total)&&Math.abs(q*price-total)>Math.max(0.08,total*0.015),sourceLine:sourceLine||''});
+  return true;
  };
  const lines=String(text||'').replace(/\u00a0/g,' ').replace(/\r/g,'\n').split('\n').map(clean).filter(Boolean);
+ const consumed=new Set();
+ // Formato detalhado com descrição identificada por "(Código: ...)" usado em alguns cupons.
  for(let i=0;i<lines.length;i++){
-  const line=lines[i];
-  // Receipt product heading: description and optional product code.
-  const nm=line.match(/^(.+?)\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*([A-Z0-9]+)\s*\)\s*(.*)$/i);
+  const line=lines[i],nm=line.match(/^(.+?)\s*\(\s*(?:C[oó]digo|Codigo)\s*:\s*([A-Z0-9]+)\s*\)\s*(.*)$/i);
   if(!nm)continue;
-  const name=nm[1];
-  // The OCR often puts the detail fields on the next line; allow them to be split over nearby lines too.
-  let block=[nm[3]||''];
+  const block=[nm[3]||''];let last=i;
   for(let j=i+1;j<Math.min(lines.length,i+4);j++){
    if(/\(\s*(?:C[oó]digo|Codigo)\s*:/i.test(lines[j]))break;
-   block.push(lines[j]);
-   if(/Qtde\s*\.?\s*:/i.test(lines[j])&&/V[Il1]\.?\s*Unit/i.test(block.join(' ')))break;
+   block.push(lines[j]);last=j;
+   if(/Qtde\s*\.?\s*:/i.test(lines[j])&&/V[Il1]\.\s*Unit/i.test(block.join(' ')))break;
   }
   const detail=clean(block.join(' '));
-  const d=detail.match(/Qtde\s*\.?\s*:?\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+V[Il1]\.?\s*Unit\s*\.?\s*:?\s*([\d.,]+)\s+([\d.,]+)/i);
-  if(!d)continue;
-  const raw=d[2].toUpperCase();
-  const unit=/^K(G|Q)\d*$/.test(raw)?'kg':/^(L|LT|LTR)\d*$/.test(raw)?'L':'un';
-  const q=num(d[1]),price=num(d[3]),total=num(d[4]);
-  // Flag likely OCR mismatch (unit price × quantity differs materially from printed total).
-  const expected=q*price;
-  const priceNeedsReview=Number.isFinite(total)&&Math.abs(expected-total)>Math.max(0.08,total*0.015);
-  add(name,q,unit,price,total);
-  if(rows.length)rows[rows.length-1].priceNeedsReview=priceNeedsReview;
-  i+=Math.max(0,block.length-1);
+  const d=detail.match(/Qtde\s*\.?\s*:?\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+V[Il1]\.\s*Unit\s*\.?\s*:?\s*([\d.,]+)\s+([\d.,]+)/i);
+  if(d){const raw=d[2].toUpperCase(),unit=/^K(G|Q)\d*$/.test(raw)?'kg':/^(L|LT|LTR)\d*$/.test(raw)?'L':'un';add(nm[1],num(d[1]),unit,num(d[3]),num(d[4]),line);for(let k=i;k<=last;k++)consumed.add(k);i=last;}
+ }
+ // Formato comum de NFC-e: descrição, quantidade/unidade, preço unitário e total na mesma linha.
+ // Também aceita códigos de item/código de barras antes da descrição e detalhes quebrados em duas linhas.
+ const detailOnly=/^([\d.,]+)\s*(UN|UND|UNID|KG|KILO|G|GR|L|LT|LTR|ML|PC|PCT|PCTO|CX|FD|DZ)\s*(?:X\s*)?(?:R\$\s*)?([\d.,]+)\s+([\d.,]+)$/i;
+ const fullLine=/^(?:(\d{1,4})\s+)?(?:(\d{8,14})\s+)?(.+?)\s+([\d.,]+)\s*(UN|UND|UNID|KG|KILO|G|GR|L|LT|LTR|ML|PC|PCT|PCTO|CX|FD|DZ)\s*(?:X\s*)?(?:R\$\s*)?([\d.,]+)\s+([\d.,]+)$/i;
+ const unitMap=raw=>/^(KG|KILO)$/.test(raw)?'kg':/^(L|LT|LTR)$/.test(raw)?'L':/^(G|GR)$/.test(raw)?'g':/^ML$/.test(raw)?'ml':/^(PCT|PCTO)$/.test(raw)?'pct':/^DZ$/.test(raw)?'dz':/^(CX|FD)$/.test(raw)?'pct':'un';
+ for(let i=0;i<lines.length;i++){
+  if(consumed.has(i))continue;
+  let m=lines[i].match(fullLine);
+  if(m){
+   const name=clean(m[3]),q=num(m[4]),unit=unitMap(m[5].toUpperCase()),price=num(m[6]),total=num(m[7]);
+   if(add(name,q,unit,price,total,lines[i]))consumed.add(i);
+   continue;
+  }
+  const d=lines[i].match(detailOnly);
+  if(d&&i>0&&!consumed.has(i-1)){
+   const prior=lines[i-1];
+   if(prior.length>2&&!/^(?:subtotal|total|desconto|cpf|cnpj|consumidor|consulta|protocolo|nota fiscal|chave de acesso)\b/i.test(prior)&&!/[\d]{5,}/.test(prior)){
+    if(add(prior,num(d[1]),unitMap(d[2].toUpperCase()),num(d[3]),num(d[4]),prior+' '+lines[i])){consumed.add(i-1);consumed.add(i);}
+   }
+  }
  }
  return rows;
 }
@@ -590,7 +601,7 @@ function renderReceiptPreview(){
     const card=document.createElement('div');card.className='record';
     const check=document.createElement('label');check.style.display='flex';check.style.gap='8px';check.style.alignItems='center';
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=r.selected!==false;cb.onchange=()=>{r.selected=cb.checked;updateReceiptAddButton();};
-    const title=document.createElement('strong');title.textContent='Item '+(i+1);check.append(cb,title);card.appendChild(check);
+    const title=document.createElement('strong');title.textContent='Item '+(i+1);check.append(cb,title);card.appendChild(check);if(r.priceNeedsReview){const warning=document.createElement('div');warning.className='notice';warning.textContent='Confira este item: a quantidade × preço unitário não corresponde ao total lido no cupom. Pode ser erro de OCR ou desconto.';card.appendChild(warning);}
     const name=document.createElement('label');name.className='field';name.textContent='Produto';const ni=document.createElement('input');ni.className='input';ni.value=r.name;ni.oninput=()=>r.name=ni.value;name.appendChild(ni);card.appendChild(name);
     const grid=document.createElement('div');grid.className='grid2';
     const priceWrap=document.createElement('label');priceWrap.className='field';priceWrap.textContent='Preço unitário (R$)';const pi=document.createElement('input');pi.className='input';pi.type='number';pi.min='0';pi.step='.001';pi.value=r.price;pi.oninput=()=>{r.price=Number(pi.value)||0;};priceWrap.appendChild(pi);
