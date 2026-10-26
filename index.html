@@ -549,7 +549,10 @@ function parseReceiptText(text){
   rows.push({id:'receipt-'+Date.now()+'-'+rows.length,name,price,unit,q,discount:0,selected:true,receiptTotal:Number.isFinite(total)?total:null,priceNeedsReview:Number.isFinite(total)&&Math.abs(q*price-total)>Math.max(0.08,total*0.015),sourceLine:sourceLine||''});
   return true;
  };
- const lines=String(text||'').replace(/\u00a0/g,' ').replace(/\r/g,'\n').split('\n').map(clean).filter(Boolean);
+ const lines=String(text||'').replace(/\u00a0/g,' ').replace(/\r/g,'\n')
+  // Alguns leitores de PDF entregam o cupom inteiro em uma única linha; separar cada produto pelo marcador de código.
+  .replace(/\s+(?=[A-ZÀ-Ü][A-Z0-9À-Ü ./'-]{1,60}\s+\(\s*(?:C[oó]digo|Codigo)\s*:)/gi,'\n')
+  .split('\n').map(clean).filter(Boolean);
  const consumed=new Set();
  // Formato detalhado com descrição identificada por "(Código: ...)" usado em alguns cupons.
  for(let i=0;i<lines.length;i++){
