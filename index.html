@@ -565,7 +565,7 @@ function parseReceiptText(text){
    if(/Qtde\s*\.?\s*:/i.test(lines[j])&&/V[Il1]\.\s*Unit/i.test(block.join(' ')))break;
   }
   const detail=clean(block.join(' '));
-  const d=detail.match(/Qtde\s*\.?\s*:?\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+V[Il1]\.\s*Unit\s*\.?\s*:?\s*([\d.,]+)\s+([\d.,]+)/i);
+  const d=detail.match(/Qtde\s*\.?\s*:?\s*([\d.,]+)\s+UN\s*:\s*([A-Z0-9]+)\s+V[Il1]\.\s*Unit\s*\.?\s*:?\s*([\d.,]+)\s+(?:V[Il1]\.\s*Total\s*:?\s*)?([\d.,]+)/i);
   if(d){const raw=d[2].toUpperCase(),unit=/^K(G|Q)\d*$/.test(raw)?'kg':/^(L|LT|LTR)\d*$/.test(raw)?'L':'un';add(nm[1],num(d[1]),unit,num(d[3]),num(d[4]),line);for(let k=i;k<=last;k++)consumed.add(k);i=last;}
  }
  // Formato comum de NFC-e: descrição, quantidade/unidade, preço unitário e total na mesma linha.
