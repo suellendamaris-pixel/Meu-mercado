@@ -276,9 +276,10 @@ function renderHistory(){
    if(!Number.isFinite(price)||price<0||!Number.isFinite(q)||q<=0||!Number.isFinite(discount)||discount<0){alert('Dados inválidos.');return;}
    c.items.push({id:'hist-'+Date.now(),name:name.trim(),price,q,unit:['un','kg','L','pct','dz'].includes(unit)?unit:'un',discount,barcode:''});c.total=Math.round(c.items.reduce((sum,i)=>sum+lineTotal(i),0)*100)/100;save();
   };
+  const editGeneralDiscount=document.createElement('button');editGeneralDiscount.className='btn outline';editGeneralDiscount.textContent='Editar desconto geral';editGeneralDiscount.onclick=()=>{const current=Number(c.generalDiscount)||0;const raw=prompt('Desconto geral da compra (R$):',current.toFixed(2).replace('.',','));if(raw===null)return;const discount=Number(raw.trim().replace(/\s/g,'').replace(',','.'));if(!Number.isFinite(discount)||discount<0){alert('Informe um desconto válido, igual ou maior que zero.');return;}const subtotal=(Array.isArray(c.items)?c.items.reduce((sum,i)=>sum+lineTotal(i),0):(Number(c.subtotal)||Number(c.total)||0));if(discount>subtotal){alert('O desconto geral não pode ser maior que o subtotal da compra ('+money(subtotal)+').');return;}c.subtotal=Math.round(subtotal*100)/100;c.generalDiscount=Math.round(discount*100)/100;c.total=Math.round((subtotal-discount)*100)/100;save();};
   const meta=document.createElement('button');meta.className='btn outline';meta.textContent='Editar data/mercado';meta.onclick=()=>{const date=prompt('Data da compra (AAAA-MM-DD):',c.date||today());if(date===null)return;const market=prompt('Nome do supermercado:',c.market||'');if(market===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){alert('Use o formato AAAA-MM-DD.');return;}c.date=date;c.market=market.trim();save();};
   const del=document.createElement('button');del.className='btn danger';del.textContent='Excluir compra';del.onclick=()=>{if(confirm('Excluir esta compra inteira do histórico?')){state.purchases=state.purchases.filter(x=>x.id!==c.id);save();}};
-  productsPanel.appendChild(add);actions.append(meta,del);d.appendChild(actions);el.appendChild(d);
+  productsPanel.appendChild(add);actions.append(add,editGeneralDiscount,meta,del);d.appendChild(actions);el.appendChild(d);
  });
 }
 function startShoppingListVoice(){
