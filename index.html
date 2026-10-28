@@ -625,7 +625,7 @@ function renderReceiptPreview(){
     const card=document.createElement('div');card.className='record';
     const check=document.createElement('label');check.style.display='flex';check.style.gap='8px';check.style.alignItems='center';
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=r.selected!==false;cb.onchange=()=>{r.selected=cb.checked;updateReceiptAddButton();};
-    const title=document.createElement('strong');title.textContent='Item '+(i+1);check.append(cb,title);card.appendChild(check);if(r.priceNeedsReview){const warning=document.createElement('div');warning.className='notice';warning.textContent='Confira este item: a quantidade × preço unitário não corresponde ao total lido no cupom. Pode ser erro de OCR ou desconto.';card.appendChild(warning);}
+    const title=document.createElement('strong');title.textContent='Item '+(i+1)+(r.code?' · Código '+r.code:'');check.append(cb,title);card.appendChild(check);if(r.priceNeedsReview){const warning=document.createElement('div');warning.className='notice';warning.textContent='Confira este item: a quantidade × preço unitário não corresponde ao total lido no cupom. Pode ser erro de OCR ou desconto.';card.appendChild(warning);}
     const name=document.createElement('label');name.className='field';name.textContent='Produto';const ni=document.createElement('input');ni.className='input';ni.value=r.name;ni.oninput=()=>r.name=ni.value;name.appendChild(ni);card.appendChild(name);
     const grid=document.createElement('div');grid.className='grid2';
     const priceWrap=document.createElement('label');priceWrap.className='field';priceWrap.textContent='Preço unitário (R$)';const pi=document.createElement('input');pi.className='input';pi.type='number';pi.min='0';pi.step='.001';pi.value=r.price;pi.oninput=()=>{r.price=Number(pi.value)||0;};priceWrap.appendChild(pi);
@@ -645,7 +645,7 @@ function addReceiptItemsToCart(){
   const chosen=receiptRows.filter(r=>r.selected&&r.name.trim()&&Number.isFinite(r.price)&&r.price>=0&&r.q>0);
   if(!chosen.length){$('receiptStatus').textContent='Selecione pelo menos um produto válido.';return;}
   const market=$('market').value.trim();state.market=market;state.date=$('purchaseDate').value||today();
-  chosen.forEach((r,i)=>{const item={id:crypto.randomUUID?crypto.randomUUID():'receipt-'+Date.now()+'-'+i,name:r.name.trim(),price:Number(r.price),unit:r.unit||'un',q:Number(r.q),discount:Math.max(0,Number(r.discount)||0),barcode:''};if(item.discount>item.q*item.price)item.discount=item.q*item.price;state.cart.push(item);state.productMeta[item.name.toLowerCase()]={name:item.name,unit:item.unit,lastPrice:item.price,lastDate:state.date};});
+  chosen.forEach((r,i)=>{const item={id:crypto.randomUUID?crypto.randomUUID():'receipt-'+Date.now()+'-'+i,name:r.name.trim(),price:Number(r.price),unit:r.unit||'un',q:Number(r.q),discount:Math.max(0,Number(r.discount)||0),packageSize:Number(r.packageSize)||null,packageUnit:r.packageUnit||'',barcode:''};if(item.discount>item.q*item.price)item.discount=item.q*item.price;state.cart.push(item);state.productMeta[item.name.toLowerCase()]={name:item.name,unit:item.unit,lastPrice:item.price,lastDate:state.date};});
   save();$('receiptStatus').textContent=`${chosen.length} produto(s) adicionado(s) ao carrinho. Confira o total e finalize quando estiver tudo certo.`;$('receiptAddBtn').disabled=true;
   setTimeout(()=>{$('receiptDialog').close();switchTab('buy');},900);
 }
