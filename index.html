@@ -260,9 +260,14 @@ function renderHistory(){
     const price=Number((prompt('Preço unitário (R$):',String(item.price??0))||'').replace(',','.'));
     const q=Number((prompt('Quantidade:',String(item.q??1))||'').replace(',','.'));
     const unit=(prompt('Unidade (un, kg, L, pct, dz):',item.unit||'un')||item.unit||'un').trim();
-    const discount=Number((prompt('Desconto total deste item (R$):',String(item.discount||0))||'0').replace(',','.'));
-    if(!name.trim()||!Number.isFinite(price)||price<0||!Number.isFinite(q)||q<=0||!Number.isFinite(discount)||discount<0){alert('Dados inválidos.');return;}
-    Object.assign(item,{name:name.trim(),price,q,unit:['un','kg','L','pct','dz'].includes(unit)?unit:'un',discount});save();
+    const discountRaw=prompt('Desconto total deste item (R$):',String(item.discount||0));if(discountRaw===null)return;
+    const discount=Number(discountRaw.replace(',','.'));
+    const packageSizeRaw=prompt('Conteúdo da embalagem (quantidade, ex.: 500; deixe vazio se não se aplica):',item.packageSize==null?'':String(item.packageSize));if(packageSizeRaw===null)return;
+    const packageSize=packageSizeRaw.trim()===''?null:Number(packageSizeRaw.replace(',','.'));
+    const packageUnitRaw=prompt('Unidade do conteúdo (g, kg, ml, L; deixe vazio se não se aplica):',item.packageUnit||'');if(packageUnitRaw===null)return;
+    const packageUnit=packageUnitRaw.trim();
+    if(!name.trim()||!Number.isFinite(price)||price<0||!Number.isFinite(q)||q<=0||!Number.isFinite(discount)||discount<0|| (packageSize!==null&&(!Number.isFinite(packageSize)||packageSize<=0)) || (packageSize!==null&&!['g','kg','ml','L'].includes(packageUnit)) || (packageSize===null&&packageUnit!=='')){alert('Dados inválidos. Confira preço, quantidade, desconto e conteúdo da embalagem.');return;}
+    Object.assign(item,{name:name.trim(),price,q,unit:['un','kg','L','pct','dz'].includes(unit)?unit:'un',discount,packageSize,packageUnit:packageSize?packageUnit:''});save();
    };
    const delItem=document.createElement('button');delItem.className='iconbtn';delItem.style.marginLeft='4px';delItem.textContent='Excluir';delItem.onclick=()=>{if(confirm('Excluir “'+(item.name||'produto')+'” desta compra?')){c.items.splice(index,1);c.total=Math.round(c.items.reduce((sum,i)=>sum+lineTotal(i),0)*100)/100;save();}};
    actions.append(edit,delItem);tr.appendChild(actions);tbody.appendChild(tr);
@@ -274,9 +279,14 @@ function renderHistory(){
    const price=Number((prompt('Preço unitário (R$):','0')||'').replace(',','.'));
    const q=Number((prompt('Quantidade:','1')||'').replace(',','.'));
    const unit=(prompt('Unidade (un, kg, L, pct, dz):','un')||'un').trim();
-   const discount=Number((prompt('Desconto total deste item (R$):','0')||'0').replace(',','.'));
-   if(!Number.isFinite(price)||price<0||!Number.isFinite(q)||q<=0||!Number.isFinite(discount)||discount<0){alert('Dados inválidos.');return;}
-   c.items.push({id:'hist-'+Date.now(),name:name.trim(),price,q,unit:['un','kg','L','pct','dz'].includes(unit)?unit:'un',discount,barcode:''});c.total=Math.round(c.items.reduce((sum,i)=>sum+lineTotal(i),0)*100)/100;save();
+   const discountRaw=prompt('Desconto total deste item (R$):','0');if(discountRaw===null)return;
+   const discount=Number(discountRaw.replace(',','.'));
+   const packageSizeRaw=prompt('Conteúdo da embalagem (quantidade, ex.: 500; deixe vazio se não se aplica):','');if(packageSizeRaw===null)return;
+   const packageSize=packageSizeRaw.trim()===''?null:Number(packageSizeRaw.replace(',','.'));
+   const packageUnitRaw=prompt('Unidade do conteúdo (g, kg, ml, L; deixe vazio se não se aplica):','');if(packageUnitRaw===null)return;
+   const packageUnit=packageUnitRaw.trim();
+   if(!Number.isFinite(price)||price<0||!Number.isFinite(q)||q<=0||!Number.isFinite(discount)||discount<0||(packageSize!==null&&(!Number.isFinite(packageSize)||packageSize<=0))||(packageSize!==null&&!['g','kg','ml','L'].includes(packageUnit))||(packageSize===null&&packageUnit!=='')){alert('Dados inválidos. Confira preço, quantidade, desconto e conteúdo da embalagem.');return;}
+   c.items.push({id:'hist-'+Date.now(),name:name.trim(),price,q,unit:['un','kg','L','pct','dz'].includes(unit)?unit:'un',discount,packageSize,packageUnit:packageSize?packageUnit:'',barcode:''});c.total=Math.round(c.items.reduce((sum,i)=>sum+lineTotal(i),0)*100)/100;save();
   };
   const editGeneralDiscount=document.createElement('button');editGeneralDiscount.className='btn outline';editGeneralDiscount.textContent='Editar desconto geral';editGeneralDiscount.onclick=()=>{const current=Number(c.generalDiscount)||0;const raw=prompt('Desconto geral da compra (R$):',current.toFixed(2).replace('.',','));if(raw===null)return;const discount=Number(raw.trim().replace(/\s/g,'').replace(',','.'));if(!Number.isFinite(discount)||discount<0){alert('Informe um desconto válido, igual ou maior que zero.');return;}const subtotal=(Array.isArray(c.items)?c.items.reduce((sum,i)=>sum+lineTotal(i),0):(Number(c.subtotal)||Number(c.total)||0));if(discount>subtotal){alert('O desconto geral não pode ser maior que o subtotal da compra ('+money(subtotal)+').');return;}c.subtotal=Math.round(subtotal*100)/100;c.generalDiscount=Math.round(discount*100)/100;c.total=Math.round((subtotal-discount)*100)/100;save();};
   const meta=document.createElement('button');meta.className='btn outline';meta.textContent='Editar data/mercado';meta.onclick=()=>{const date=prompt('Data da compra (AAAA-MM-DD):',c.date||today());if(date===null)return;const market=prompt('Nome do supermercado:',c.market||'');if(market===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){alert('Use o formato AAAA-MM-DD.');return;}c.date=date;c.market=market.trim();save();};
