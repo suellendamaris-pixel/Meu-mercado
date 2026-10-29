@@ -192,7 +192,8 @@ function renderProducts(){
  list.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;$('priceCompare').appendChild(o);});
  const el=$('productList');el.innerHTML='';
  if(!list.length){el.innerHTML='<div class="empty">Seus produtos aparecerão aqui depois que você registrar compras.</div>';return;}
- const alertRows=list.map(n=>({name:n,insight:priceInsights(n)})).filter(x=>x.insight&&x.insight.previous);
+ const safeInsights=n=>{try{return priceInsights(n);}catch(err){return null;}};
+ const alertRows=list.map(n=>({name:n,insight:safeInsights(n)})).filter(x=>x.insight&&x.insight.previous);
  const alertCard=document.createElement('div');alertCard.className='card';alertCard.style.margin='0 0 14px';alertCard.style.padding='13px';
  const alertTitle=document.createElement('h3');alertTitle.style.margin='0 0 8px';alertTitle.style.fontSize='1rem';alertTitle.textContent='🔔 Alertas de variação de preços';
  alertCard.appendChild(alertTitle);
@@ -206,7 +207,7 @@ function renderProducts(){
  }
  el.appendChild(alertCard);
  list.forEach(n=>{
-  const rows=priceRows(n.toLocaleLowerCase('pt-BR')),insight=priceInsights(n);
+  let rows=[],insight=null;try{rows=priceRows(n.toLocaleLowerCase('pt-BR'));}catch(err){rows=[];}insight=safeInsights(n);
   const d=document.createElement('div');d.className='record';
   const head=document.createElement('div');head.className='recordhead';
   const title=document.createElement('div');title.className='recordtitle';title.textContent=n;
