@@ -428,6 +428,7 @@ function renderShoppingList(){
  const el=$('shoppingListItems');if(!el)return;el.innerHTML='';
  const list=Array.isArray(state.shoppingList)?state.shoppingList:[];
  if(!list.length){el.innerHTML='<div class="empty">Sua lista está vazia. Adicione o que precisa comprar.</div>';return;}
+ const safeInsight=name=>{try{return priceInsights(name);}catch(err){return null;}};
  const pending=list.filter(item=>!item.checked);
  const completed=list.filter(item=>!!item.checked);
  let estimatedTotal=0,withoutPrice=0;
@@ -442,13 +443,13 @@ function renderShoppingList(){
  const estimateNote=document.createElement('div');estimateNote.className='muted';estimateNote.textContent='Calculado com os preços conhecidos mais recentes e as quantidades informadas. '+(withoutPrice?withoutPrice+' produto(s) pendente(s) sem preço conhecido não entram no total.':'Todos os produtos pendentes têm preço conhecido.');
  estimate.append(estimateLabel,estimateValue,estimateNote);el.appendChild(estimate);
  let potentialSavings=0,savingsProducts=0;
- pending.forEach(item=>{const q=Number(item.q),insight=priceInsights(item.name);if(insight&&insight.savingsPerUnit!==null&&Number.isFinite(q)&&q>0&&insight.savingsPerUnit>0){potentialSavings+=q*insight.savingsPerUnit;savingsProducts++;}});
+ pending.forEach(item=>{const q=Number(item.q),insight=safeInsight(item.name);if(insight&&insight.savingsPerUnit!==null&&Number.isFinite(q)&&q>0&&insight.savingsPerUnit>0){potentialSavings+=q*insight.savingsPerUnit;savingsProducts++;}});
  const savingsCard=document.createElement('div');savingsCard.className='kpi';savingsCard.style.marginBottom='14px';
  const savingsLabel=document.createElement('div');savingsLabel.className='muted';savingsLabel.textContent='💰 Economia potencial pelo menor preço já registrado';
  const savingsValue=document.createElement('div');savingsValue.className='value';savingsValue.textContent=money(potentialSavings);
  const savingsNote=document.createElement('div');savingsNote.className='muted';savingsNote.textContent=savingsProducts?savingsProducts+' produto(s) com histórico comparável. Estimativa baseada no preço mais recente versus o menor preço registrado na mesma unidade; não é garantia de oferta atual.':'Ainda não há produtos pendentes com histórico comparável suficiente para estimar economia.';
  savingsCard.append(savingsLabel,savingsValue,savingsNote);el.appendChild(savingsCard);
- renderShoppingMarketEstimate(pending,el);
+ try{renderShoppingMarketEstimate(pending,el);}catch(err){const note=document.createElement('p');note.className='muted';note.textContent='A comparação por mercado estará disponível quando os dados de preço puderem ser calculados.';el.appendChild(note);}
  const renderGroup=(title,items,done)=>{
   const section=document.createElement('section');section.style.marginBottom='14px';
   const heading=document.createElement('h3');heading.style.margin='12px 0 8px';heading.style.fontSize='1rem';heading.textContent=title+' ('+items.length+')';section.appendChild(heading);
