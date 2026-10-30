@@ -463,7 +463,7 @@ function renderShoppingList(){
    if(known&&Number.isFinite(q)&&q>0){
     priceLine.textContent='Preço conhecido: '+money(known.price)+'/'+known.unit+' · subtotal estimado: '+money(q*known.price)+(known.date?' · registro de '+known.date.split('-').reverse().join('/'):'');
    }else priceLine.textContent='Sem preço conhecido — não incluído no total estimado.';
-   const insight=priceInsights(item.name);
+   const insight=safeInsight(item.name);
    if(insight){
     const alertLine=document.createElement('div');alertLine.className='small';
     const trend=insight.previous?(insight.direction==='down'?'📉 Caiu':insight.direction==='up'?'📈 Subiu':'➖ Sem mudança')+' '+Math.abs(insight.percent).toLocaleString('pt-BR',{maximumFractionDigits:1})+'% vs. registro anterior':'Aguardando outro registro para comparar';
