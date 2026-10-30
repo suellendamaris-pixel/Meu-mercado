@@ -1,4 +1,4 @@
-const CACHE = 'meu-mercado-v41-20261030';;;;;;
+const CACHE = 'meu-mercado-v42-20261030';;;;;;
 const FILES = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', event => {
